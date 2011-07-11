@@ -1,0 +1,5 @@
+WARNING: liblinear fills the scores[] table with a different order than the label order.
+
+2011-07-08: level of functionnaly: can parse a lattice and output all parses
+            need to come up with a storage methodology for the output
+java -cp liblinear-1.7-with-deps.jar:trove.jar:. LatticeParser lattices/john-eats-potatoes.txt

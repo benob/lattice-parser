@@ -137,7 +137,7 @@ class LatticeParser {
                     //System.out.println("shift " + context.input[0].word);
                     StackNode top = new StackNode(context.stack, context.input[0]);
                     if(nodeMap.containsKey(top.toString())) {
-                        //top = nodeMap.get(top.toString());
+                        top = nodeMap.get(top.toString());
                     } else {
                         nodeMap.put(top.toString(), top);
                     }

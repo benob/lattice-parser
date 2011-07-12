@@ -81,7 +81,6 @@ class LatticeParser {
     }
 
     public Vector<StackNode> latticePredict(InputNode inputStart) throws IOException {
-        THashMap<String, StackNode> nodeMap = new THashMap<String, StackNode>();
         Vector<StackNode> output = new Vector<StackNode>();
         Vector<ParseContext> openParses = new Vector<ParseContext>();
         // init openParses with start contexts (assumes at least one arc)
@@ -115,8 +114,8 @@ class LatticeParser {
                 //System.out.printf("(%s %s %s)\n", context.input[0] != null ? context.input[0].word : "null", context.input[1] != null ? context.input[1].word : "null", context.input[2] != null ? context.input[2].word : "null");
                 Vector<String> features = Features.getLatticeFeatures(context);
                 //for(String feature: features) { System.out.printf("%s ", feature); } System.out.println();
-                Linear.predictValues(model, mapper.mapForLibLinear(features), scores);
-                //model2.predict(features, scores);
+                //Linear.predictValues(model, mapper.mapForLibLinear(features), scores);
+                model2.predict(features, scores);
                 boolean available[] = new boolean[numActions];
                 Arrays.fill(available, true);
                 if(context.input[0] == null) available[SHIFT] = false;
@@ -130,17 +129,12 @@ class LatticeParser {
                     if(available[candidateAction] && (action == -1 || scores[action] < scores[candidateAction])) 
                         action = candidateAction;
                 }
-                if(action == 1) action = 2; // why why why
-                else if(action == 2) action = 1;
+                //if(action == 1) action = 2; // why why why
+                //else if(action == 2) action = 1;
                 //if(action != -1) System.out.println(actionText[action]);
                 if(action == SHIFT) {
                     //System.out.println("shift " + context.input[0].word);
                     StackNode top = new StackNode(context.stack, context.input[0]);
-                    if(nodeMap.containsKey(top.toString())) {
-                        top = nodeMap.get(top.toString());
-                    } else {
-                        nodeMap.put(top.toString(), top);
-                    }
                     context.input[0] = context.input[1];
                     context.input[1] = context.input[2];
                     if(context.input[1] != null && context.input[1].next != null && context.input[1].next.outgoing.size() > 0) { // a bit tricky
@@ -155,32 +149,16 @@ class LatticeParser {
                     }
                 } else if(action == LEFT) {
                     //System.out.println("left " + context.stack.next.input.word + " <- " + context.stack.input.word);
-                    System.out.printf("left %s %s", context.stack.next.toString(), context.stack.toString());
                     StackNode top = new StackNode(context.stack.next.next, context.stack.next.children, context.stack.next.input);
                     top.children.add(context.stack);
                     Collections.sort(top.children);
-                    System.out.println("> " + top.toString());
-                    if(nodeMap.containsKey(top.toString())) {
-                        //top = nodeMap.get(top.toString());
-                    } else {
-                        nodeMap.put(top.toString(), top);
-                    }
-                    System.out.println("< " + top.toString());
                     context.stack = top;
                     newOpenParses.add(context);
                 } else if(action == RIGHT) {
                     //System.out.println("right " + context.stack.next.input.word + " -> " + context.stack.input.word);
-                    System.out.printf("right %s %s", context.stack.next.toString(), context.stack.toString());
                     StackNode top = new StackNode(context.stack.next.next, context.stack.children, context.stack.input);
                     top.children.add(context.stack.next);
                     Collections.sort(top.children);
-                    System.out.println("> " + top.toString());
-                    if(nodeMap.containsKey(top.toString())) {
-                        //top = nodeMap.get(top.toString());
-                    } else {
-                        nodeMap.put(top.toString(), top);
-                    }
-                    System.out.println("< " + top.toString());
                     context.stack = top;
                     newOpenParses.add(context);
                 } else {
@@ -322,9 +300,9 @@ class LatticeParser {
 
     public void outputForest(Vector<StackNode> forest, PrintStream output) {
         for(StackNode node: forest) {
-            System.out.println(node.toString());
+            //System.out.println(node.toString());
         }
-        if(true) return;
+        THashMap<String, StackNode> alreadyOutput = new THashMap<String, StackNode>();
         Vector<StackNode> waitingList = new Vector<StackNode>();
         int nextId = 1;
         for(StackNode node: forest) {
@@ -332,12 +310,13 @@ class LatticeParser {
             nextId++;
             output.printf("0 %d %d:%s:%s\n", node.id, node.input.id, node.input.word, node.input.tag);
             for(StackNode child: node.children) {
-                if(child.id == 0) {
+                if(!alreadyOutput.containsKey(child.toString())) {
+                    alreadyOutput.put(child.toString(), child);
                     child.id = nextId;
                     nextId++;
                     waitingList.add(child);
                 }
-                else System.err.println("already seen: " + child.id);
+                else child = alreadyOutput.get(child.toString());
                 output.printf("%d %d %d:%s:%s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag);
             }
             if(node.children.size() == 0) output.println(node.id);
@@ -346,12 +325,13 @@ class LatticeParser {
             Vector<StackNode> newList = new Vector<StackNode>();
             for(StackNode node: waitingList) {
                 for(StackNode child: node.children) {
-                    if(child.id == 0) {
+                    if(!alreadyOutput.containsKey(child.toString())) {
+                        alreadyOutput.put(child.toString(), child);
                         child.id = nextId;
                         nextId++;
                         newList.add(child);
                     }
-                    else System.err.println("already seen: " + child.id);
+                    else child = alreadyOutput.get(child.toString());
                     output.printf("%d %d %d:%s:%s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag);
                 }
                 if(node.children.size() == 0) output.println(node.id);
@@ -444,10 +424,10 @@ class LatticeParser {
     OnDiskModel model2 = new OnDiskModel();
     public void testLattice(String filename) throws IOException {
         System.err.print("loading model: ");
-        mapper.loadDict("model.features");
-        model = Model.load(new File("all-examples.model"));
-        /*model2 = new OnDiskModel();
-        model2.loadModel("all-examples.binary-model");*/
+        /*mapper.loadDict("model.features");
+        model = Model.load(new File("all-examples.model"));*/
+        model2 = new OnDiskModel();
+        model2.loadModel("all-examples.binary-model");
         System.err.println("ok.");
         BufferedReader input = new BufferedReader(new FileReader(filename));
         String line;

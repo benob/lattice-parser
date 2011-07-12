@@ -3,3 +3,37 @@ WARNING: liblinear fills the scores[] table with a different order than the labe
 2011-07-08: level of functionnaly: can parse a lattice and output all parses
             need to come up with a storage methodology for the output
 java -cp liblinear-1.7-with-deps.jar:trove.jar:. LatticeParser lattices/john-eats-potatoes.txt
+(cut -f3 -d" " lattices/john-eats-potatoes.log;cut -f4 -d" " lattices/john-eats-potatoes.log)|grep .|sort -u|cat -n| awk '{print $2"\t"$1}' > lattices/john-eats-potatoes.lex
+
+ideas:
+* labeled predictions
+* model on-disk format -> patricia tree
+* c implementation
+* incremental features
+
+paper:
+* present algorithm
+* sparse representation?
+* minimal tree automaton?
+* what about arc eager parser?
+* subtrees: explicitly deduplicate tree during parse (because we have all subtrees): use input/chilren/label as hash key
+  incremental: a given tree is already deduplicated
+* same for common ancester tree
+
+file format:
+list of arcs
+0 1 id word tag label score vector
+1 2 child1 (order of children?) use topological order
+1 3 child2
+1 4 child3
+
+need to label states
+1) collect nodes during parsing, then output children from each of them
+2) or, use hash table with nodes as keys
+
+how many arcs?
+how many states
+can we process efficiently the resulting trees?
+=> pattern matching
+=> pruning paths
+

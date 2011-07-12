@@ -8,6 +8,21 @@ class StackNode implements Comparable<StackNode> {
     public StackNode next;
     public Vector<StackNode> children;
     public InputArc input;
+    public Vector<StackNode> createdFrom;
+    int id; // state id set during output
+    public String representation = null;
+    public String toString() {
+        if(representation != null) return representation;
+        StringBuilder output = new StringBuilder("(" + input.word);
+        output.append(input.id);
+        for(StackNode child: children) {
+            output.append(child.toString());
+        }
+        output.append(")");
+        representation = output.toString();
+        return representation;
+    }
+
     public StackNode(StackNode next, Vector<StackNode> children, InputArc input) {
         this.next = next;
         this.children = new Vector<StackNode>(children);

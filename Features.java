@@ -10,7 +10,7 @@ class Features {
             return -1;
         }
     }
-    TObjectIntHashMap<String> featureDict = new TObjectIntHashMap<String>();
+    public TObjectIntHashMap<String> featureDict = new TObjectIntHashMap<String>();
     TObjectIntHashMap<String> labelDict = new TObjectIntHashMap<String>();
     TObjectIntHashMap<String> counts = new TObjectIntHashMap<String>();
 

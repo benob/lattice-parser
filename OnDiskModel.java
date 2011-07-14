@@ -31,6 +31,7 @@ class OnDiskModel {
                 }
                 numWritten++;
                 if(numWritten % 1000 == 0) System.err.printf("\rweights: %d%%", 100 * numWritten / numFeatures);
+                if(numWritten == numFeatures) break;
             } else if(line.startsWith("nr_class ")) {
                 String tokens[] = line.split(" ");
                 numLabels = Integer.parseInt(tokens[1]);
@@ -99,11 +100,11 @@ class OnDiskModel {
         numLabels = model.getInt(0);
         numFeatures = model.getInt(4);
         //model.seek(4 * 2 + 8 * (long) numLabels * numFeatures);
-        lookupSize = model.getInt(4 * 2 + 8 * numLabels * numFeatures);
-        cache = new String[16384];
-        weightCache = new double[16384][numLabels];
-        idCache = new int[16384];
-        System.err.printf("labels: %d, features: %d, lookup: %d, length:%d\n", numLabels, numFeatures, lookupSize, file.length());
+        lookupSize = model.getInt(4 * 2 + 8 * (numLabels * numFeatures));
+        cache = new String[100000];
+        weightCache = new double[100000][numLabels];
+        idCache = new int[100000];
+        //System.err.printf("labels: %d, features: %d, lookup: %d, length:%d\n", numLabels, numFeatures, lookupSize, file.length());
     }
     String cache[];
     int idCache[];

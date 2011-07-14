@@ -377,7 +377,7 @@ class LatticeParser {
         return actions;
     }
 
-    public void train(String filename) throws IOException {
+    public void train(String filename, String modelFileName) throws IOException {
         Node current;
         BufferedReader input = new BufferedReader(new FileReader(filename));
         Vector<Node> sentences = new Vector<Node>();
@@ -385,9 +385,21 @@ class LatticeParser {
         while(null != (current = Node.readNext(input))) {
             /*current.speechify();
             current.renumber();*/
-            sentences.add(current);
-            if(current.size() != 1) 
-                numExamples += current.size() * 2 - 3; // there will be twice as many actions minus 2 shifts at the begining and the root at the end
+            Vector<Node> nodes = current.collect();
+            boolean invalid = false;
+            for(Node node: nodes) {
+                if(node.label.equals("missinghead")) {
+                    invalid = true;
+                    break;
+                }
+            }
+            if(invalid) {
+                System.err.println("WARNING: skipping sentence with missing heads");
+            } else {
+                sentences.add(current);
+                if(current.size() != 1) 
+                    numExamples += current.size() * 2 - 3; // there will be twice as many actions minus 2 shifts at the begining and the root at the end
+            }
         }
         System.out.printf("%d examples\n", numExamples);
         problem.x = new FeatureNode[numExamples][];
@@ -399,14 +411,15 @@ class LatticeParser {
             if(actions != null) {
                 extractFeatures(nodes, actions);
             } else {
-                System.err.println("ERROR: found a non-projective tree");
+                System.err.printf("ERROR: found a non-projective tree");
+                sentence.print(System.err);
                 return;
             }
             System.out.printf("\rfeatures: %.2f%%", 100.0 * problem.l / numExamples);
         }
         System.out.printf("\rfeatures: %.2f%%\n", 100.0 * problem.l / numExamples);
         problem.n = mapper.numFeatures();
-        PrintWriter featureFile = new PrintWriter("all-examples.txt");
+        PrintWriter featureFile = new PrintWriter(modelFileName + ".examples");
         for(int i = 0; i < problem.l; i++) {
             featureFile.print(problem.y[i]);
             for(int j = 0; j < problem.x[i].length; j++) {
@@ -415,21 +428,22 @@ class LatticeParser {
             featureFile.println();
         }
         featureFile.close();
-        System.exit(0);
         model = Linear.train(problem, new Parameter(SolverType.MCSVM_CS, 1, 0.01));
-        model.save(new File("model.txt"));
-        mapper.saveDict("model.features");
+        model.save(new File(modelFileName));
+        mapper.saveDict(modelFileName + ".features");
+        System.out.println("creating binary model");
+        OnDiskModel.convert(modelFileName + ".features", modelFileName, modelFileName + ".binary");
     }
 
     OnDiskModel model2 = new OnDiskModel();
-    public void testLattice(String filename) throws IOException {
-        System.err.print("loading model: ");
+    public void testLattice(String modelFilename) throws IOException {
+        //System.err.print("loading model: ");
         /*mapper.loadDict("model.features");
         model = Model.load(new File("all-examples.model"));*/
         model2 = new OnDiskModel();
-        model2.loadModel("all-examples.binary-model");
-        System.err.println("ok.");
-        BufferedReader input = new BufferedReader(new FileReader(filename));
+        model2.loadModel(modelFilename);
+        //System.err.println("ok.");
+        BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
         String line;
         Vector<InputNode> nodes = new Vector<InputNode>();
         while(null != (line = input.readLine())) {
@@ -448,7 +462,7 @@ class LatticeParser {
                 System.out.println();
                 nodes.clear();
             } else {
-                String tokens[] = line.split(" ");
+                String tokens[] = line.split("\t");
                 if(tokens.length == 1) continue;
                 int startNode = Integer.parseInt(tokens[0]);
                 int endNode = Integer.parseInt(tokens[1]);
@@ -519,9 +533,16 @@ class LatticeParser {
     public static void main(String args[]) {
         try {
             LatticeParser parser = new LatticeParser();
-            //parser.train(args[0]);
             //parser.test(args[1]);
-            parser.testLattice(args[0]);
+            if(args.length == 1) {
+                parser.testLattice(args[0]);
+            } else if(args.length == 2) {
+                parser.train(args[0], args[1]);
+            } else {
+                System.err.println("train: java LatticeParser projective-trees-conll05 model");
+                System.err.println("predict: java LatticeParser model < input");
+                System.exit(1);
+            }
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);

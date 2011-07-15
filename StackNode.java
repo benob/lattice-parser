@@ -1,12 +1,14 @@
 import java.util.*;
 
 class StackNode implements Comparable<StackNode> {
+    static public int numInstances = 0;
     public int compareTo(StackNode other) {
         if(other.input.id < input.id) return 1;
         return -1;
     }
     public StackNode next;
     public Vector<StackNode> children;
+    public String label = null;
     public InputArc input;
     public Vector<StackNode> createdFrom;
     int id; // state id set during output
@@ -15,6 +17,8 @@ class StackNode implements Comparable<StackNode> {
         if(representation != null) return representation;
         StringBuilder output = new StringBuilder("(" + input.word);
         output.append(input.id);
+        output.append(":");
+        output.append(label);
         for(StackNode child: children) {
             output.append(child.toString());
         }
@@ -24,11 +28,13 @@ class StackNode implements Comparable<StackNode> {
     }
 
     public StackNode(StackNode next, Vector<StackNode> children, InputArc input) {
+        numInstances++;
         this.next = next;
         this.children = new Vector<StackNode>(children);
         this.input = input;
     }
     public StackNode(StackNode next, InputArc input) {
+        numInstances++;
         this.next = next;
         this.children = new Vector<StackNode>();
         this.input = input;

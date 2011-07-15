@@ -5,11 +5,13 @@ import liblinear.*;
 
 // implementation of the arc normal parser
 class LatticeParser {
+    final int UNLABELED = 0;
+    final int LABELED = 1;
+    int mode = LABELED;
     public static final int SHIFT = 0;
     public static final int LEFT = 1;
     public static final int RIGHT = 2;
-    public static final int numActions = 3;
-    public static final String actionText[] = {"shift", "left", "right"};
+    public static int numActions = 3;
 
     public Features mapper = new Features();
     public Problem problem = new Problem();
@@ -43,33 +45,34 @@ class LatticeParser {
                     return null;
                 }
             }
-            //System.out.println(actionText[action]);
             if(action == SHIFT) {
                 if(start >= input.size()) {
-                    System.err.printf("ERROR: impossible action \"%s\", start >= input.size()\n", actionText[action]);
+                    System.err.printf("ERROR: impossible action \"SHIFT\", start >= input.size()\n");
                     return null;
                 }
                 stack.add(new Node(input.get(start)));
                 start++;
-            } else if(action == LEFT) {
+            } else if((action - 1) % 2 + 1 == LEFT) {
                 if(stack.size() < 2) {
-                    System.err.printf("ERROR: impossible action \"%s\", stack.size() < 2\n", actionText[action]);
+                    System.err.printf("ERROR: impossible action \"LEFT\", stack.size() < 2\n");
                     return null;
                 }
                 Node first = stack.get(stack.size() - 1);
                 Node second = stack.get(stack.size() - 2);
                 first.setParent(second);
+                if(mode == LABELED) label = mapper.labelText((action - 1) / 2);
                 first.label = label;
                 stack.set(stack.size() - 2, second);
                 stack.remove(stack.size() - 1);
-            } else if(action == RIGHT) {
+            } else if((action - 1) % 2 + 1 == RIGHT) {
                 if(stack.size() < 2) {
-                    System.err.printf("ERROR: impossible action \"%s\", stack.size() < 2\n", actionText[action]);
+                    System.err.printf("ERROR: impossible action \"RIGHT\", stack.size() < 2\n");
                     return null;
                 }
                 Node first = stack.get(stack.size() - 1);
                 Node second = stack.get(stack.size() - 2);
                 second.setParent(first);
+                if(mode == LABELED) label = mapper.labelText((action - 1) / 2);
                 second.label = label;
                 stack.set(stack.size() - 2, first);
                 stack.remove(stack.size() - 1);
@@ -106,7 +109,7 @@ class LatticeParser {
             }
         }
 
-        double scores[] = new double[numActions + 1];
+        double scores[] = new double[model2.numLabels];
 
         while(openParses.size() > 0) {
             Vector<ParseContext> newOpenParses = new Vector<ParseContext>();
@@ -116,7 +119,7 @@ class LatticeParser {
                 //for(String feature: features) { System.out.printf("%s ", feature); } System.out.println();
                 //Linear.predictValues(model, mapper.mapForLibLinear(features), scores);
                 model2.predict(features, scores);
-                boolean available[] = new boolean[numActions];
+                boolean available[] = new boolean[3];
                 Arrays.fill(available, true);
                 if(context.input[0] == null) available[SHIFT] = false;
                 if(context.stack == null || context.stack.next == null) {
@@ -125,14 +128,16 @@ class LatticeParser {
                 }
                 int action = -1; // recompute argmax with constraints
                 //System.out.printf("available=[%s %s %s]\n", available[0], available[1], available[2]);
-                for(int candidateAction = 0; candidateAction < numActions; candidateAction ++) {
-                    if(available[candidateAction] && (action == -1 || scores[action] < scores[candidateAction])) 
+                for(int candidateAction = 0; candidateAction < model2.numLabels; candidateAction ++) {
+                    if(available[(candidateAction - 1) % 2 + 1] && (action == -1 || scores[action] < scores[candidateAction])) 
                         action = candidateAction;
                 }
+                //System.out.printf("label=%d action=%d dep=%d\n", action, (action - 1) % 2 + 1, (action - 1) / 2);
                 //if(action == 1) action = 2; // why why why
                 //else if(action == 2) action = 1;
-                //if(action != -1) System.out.println(actionText[action]);
-                if(action == SHIFT) {
+                if(action == -1) {
+                    output.add(context.stack); // generated a complete tree
+                } else if(action == SHIFT) {
                     //System.out.println("shift " + context.input[0].word);
                     StackNode top = new StackNode(context.stack, context.input[0]);
                     context.input[0] = context.input[1];
@@ -147,23 +152,24 @@ class LatticeParser {
                         context.stack = top;
                         newOpenParses.add(context);
                     }
-                } else if(action == LEFT) {
-                    //System.out.println("left " + context.stack.next.input.word + " <- " + context.stack.input.word);
+                } else if((action - 1) % 2 + 1 == LEFT) {
+                    //System.out.println("left " + context.stack.next.input.word + " <-(" + model2.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
                     StackNode top = new StackNode(context.stack.next.next, context.stack.next.children, context.stack.next.input);
                     top.children.add(context.stack);
+                    if(mode == LABELED) context.stack.label = model2.labels.get((action - 1) / 2);
                     Collections.sort(top.children);
                     context.stack = top;
                     newOpenParses.add(context);
-                } else if(action == RIGHT) {
+                } else if((action - 1) % 2 + 1 == RIGHT) {
                     //System.out.println("right " + context.stack.next.input.word + " -> " + context.stack.input.word);
                     StackNode top = new StackNode(context.stack.next.next, context.stack.children, context.stack.input);
                     top.children.add(context.stack.next);
+                    if(mode == LABELED) context.stack.next.label = model2.labels.get((action - 1) / 2);
                     Collections.sort(top.children);
                     context.stack = top;
                     newOpenParses.add(context);
                 } else {
-                    //System.out.println("COMPL");
-                    output.add(context.stack); // generated a complete tree
+                    System.err.println("ERROR: unexpected action " + action);
                 }
             }
             openParses = newOpenParses;
@@ -260,7 +266,7 @@ class LatticeParser {
             String label = null;
             if(action == SHIFT) {
                 if(start >= input.size()) {
-                    System.err.printf("ERROR: impossible action \"%s\", start >= input.size()\n", actionText[action]);
+                    System.err.printf("ERROR: impossible action \"SHIFT\", start >= input.size()\n");
                     return null;
                 }
                 System.out.println("shift " + input.get(start).word);
@@ -268,7 +274,7 @@ class LatticeParser {
                 start++;
             } else if(action == LEFT) {
                 if(stack.size() < 2) {
-                    System.err.printf("ERROR: impossible action \"%s\", stack.size() < 2\n", actionText[action]);
+                    System.err.printf("ERROR: impossible action \"LEFT\", stack.size() < 2\n");
                     return null;
                 }
                 Node first = stack.get(stack.size() - 1);
@@ -280,7 +286,7 @@ class LatticeParser {
                 stack.remove(stack.size() - 1);
             } else if(action == RIGHT) {
                 if(stack.size() < 2) {
-                    System.err.printf("ERROR: impossible action \"%s\", stack.size() < 2\n", actionText[action]);
+                    System.err.printf("ERROR: impossible action \"RIGHT\", stack.size() < 2\n");
                     return null;
                 }
                 Node first = stack.get(stack.size() - 1);
@@ -308,7 +314,7 @@ class LatticeParser {
         for(StackNode node: forest) {
             node.id = nextId;
             nextId++;
-            output.printf("0 %d %d:%s:%s\n", node.id, node.input.id, node.input.word, node.input.tag);
+            output.printf("0 %d %d:%s:%s %s\n", node.id, node.input.id, node.input.word, node.input.tag, node.label);
             for(StackNode child: node.children) {
                 if(!alreadyOutput.containsKey(child.toString())) {
                     alreadyOutput.put(child.toString(), child);
@@ -317,7 +323,7 @@ class LatticeParser {
                     waitingList.add(child);
                 }
                 else child = alreadyOutput.get(child.toString());
-                output.printf("%d %d %d:%s:%s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag);
+                output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, child.label);
             }
             if(node.children.size() == 0) output.println(node.id);
         }
@@ -332,12 +338,16 @@ class LatticeParser {
                         newList.add(child);
                     }
                     else child = alreadyOutput.get(child.toString());
-                    output.printf("%d %d %d:%s:%s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag);
+                    output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, child.label);
                 }
                 if(node.children.size() == 0) output.println(node.id);
             }
             waitingList = newList;
         }
+        System.err.printf("arcs: %d, contexts: %d, stacknodes: %d, paths: %d\n", InputArc.numInstances, ParseContext.numInstances, StackNode.numInstances, forest.size());
+        InputArc.numInstances = 0;
+        ParseContext.numInstances = 0;
+        StackNode.numInstances = 0;
     }
 
     public Vector<Integer> oracle(Vector<Node> input) {
@@ -357,11 +367,13 @@ class LatticeParser {
                 Node second = stack.get(stack.size() - 2);
                 // there is a link and there are no children in the remaining input
                 if(first.parent == second && (first.rightMostChild == null || start >= input.size() || first.rightMostChild.id < input.get(start).id)) {
-                    actions.add(LEFT);
+                    if(mode == UNLABELED) actions.add(LEFT);
+                    else if(mode == LABELED) actions.add(LEFT + 2 * mapper.mapLabel(first.label));
                     stack.set(stack.size() - 2, second);
                     stack.remove(stack.size() - 1);
                 } else if(second.parent == first && (second.rightMostChild == null || start >= input.size() || second.rightMostChild.id < input.get(start).id)) {
-                    actions.add(RIGHT);
+                    if(mode == UNLABELED) actions.add(RIGHT);
+                    else if(mode == LABELED) actions.add(RIGHT + 2 * mapper.mapLabel(second.label));
                     stack.set(stack.size() - 2, first);
                     stack.remove(stack.size() - 1);
                 } else if(start < input.size()) {
@@ -374,6 +386,7 @@ class LatticeParser {
                 }
             }
         }
+        numActions = mapper.numLabels() * 2 + 3;
         return actions;
     }
 
@@ -451,18 +464,11 @@ class LatticeParser {
             if("".equals(line)) {
                 nodes.firstElement().number(1);
                 Vector<StackNode> forest = latticePredict(nodes.firstElement());
-                /*for(StackNode tree: forest) {
-                    tree.setParentId();
-                    for(StackNode node: tree.collect()) {
-                        System.out.printf("%d %s %s %d\n", node.input.id, node.input.word, node.input.tag, node.parentId);
-                    }
-                    System.out.println();
-                }*/
                 outputForest(forest, System.out);
                 System.out.println();
                 nodes.clear();
             } else {
-                String tokens[] = line.split("\t");
+                String tokens[] = line.split("\\s+");
                 if(tokens.length == 1) continue;
                 int startNode = Integer.parseInt(tokens[0]);
                 int endNode = Integer.parseInt(tokens[1]);
@@ -476,23 +482,16 @@ class LatticeParser {
         if(nodes.size() > 0) {
             nodes.firstElement().number(1);
             Vector<StackNode> forest = latticePredict(nodes.firstElement());
-            /*for(StackNode tree: forest) {
-                tree.setParentId();
-                for(StackNode node: tree.collect()) {
-                    System.out.printf("%d %s %s %d\n", node.input.id, node.input.word, node.input.tag, node.parentId);
-                }
-                System.out.println();
-            }*/
             outputForest(forest, System.out);
             System.out.println();
         }
     }
 
     public void test(String filename) throws IOException {
-        System.out.print("loading model: ");
+        /*System.out.print("loading model: ");
         mapper.loadDict("model.features");
         model = Model.load(new File("all-examples.model"));
-        System.out.println("ok.");
+        System.out.println("ok.");*/
         Node current;
         BufferedReader input = new BufferedReader(new FileReader(filename));
         int num = 0, errors = 0;

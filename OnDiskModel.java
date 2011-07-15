@@ -18,6 +18,7 @@ class OnDiskModel {
         int mapping[] = null;
         double weights[] = null;
         int numLabels = 0;
+        int mappedNumLabels = 0;
         int numFeatures = 0;
         int numWritten = 0;
         while(null != (line = input.readLine())) {
@@ -26,7 +27,7 @@ class OnDiskModel {
                 for(int i = 0; i < numLabels; i++) {
                     weights[mapping[i]] = Double.parseDouble(tokens[i]);
                 }
-                for(int i = 0; i < numLabels; i++) {
+                for(int i = 0; i < mappedNumLabels; i++) {
                     output.writeDouble(weights[i]);
                 }
                 numWritten++;
@@ -35,18 +36,27 @@ class OnDiskModel {
             } else if(line.startsWith("nr_class ")) {
                 String tokens[] = line.split(" ");
                 numLabels = Integer.parseInt(tokens[1]);
-                output.writeInt(numLabels);
                 mapping = new int[numLabels];
-                weights = new double[numLabels];
             } else if(line.startsWith("label ")) {
                 String tokens[] = line.split(" ");
                 for(int i = 1; i < tokens.length; i++) {
                     mapping[i - 1] = Integer.parseInt(tokens[i]) - 1;
+                    if(mapping[i - 1] + 1 > mappedNumLabels) mappedNumLabels = mapping[i - 1] + 1;
                 }
+                weights = new double[mappedNumLabels];
+                output.writeInt(mappedNumLabels);
             } else if(line.startsWith("nr_feature ")) {
                 String tokens[] = line.split(" ");
                 numFeatures = Integer.parseInt(tokens[1]);
                 output.writeInt(numFeatures);
+                output.writeInt(0); // placeholder for start of weights
+                for(int i = 0; i < features.numLabels(); i++) {
+                    output.writeUTF(features.labelText(i));
+                }
+                long startOfWeights = output.getFilePointer();
+                output.seek(8); // after numFeatures and numLabels
+                output.writeInt((int) startOfWeights);
+                output.seek(startOfWeights);
             } else if("w".equals(line)) {
                 inWeightVector = true;
             }
@@ -89,22 +99,34 @@ class OnDiskModel {
         output.close();
     }
 
-    int numLabels = 0;
-    int numFeatures = 0;
+    public int numLabels = 0;
+    public int numFeatures = 0;
+    public Vector<String> labels;
     int lookupSize = 0;
+    int startOfWeights = 0;
     MappedByteBuffer model;
     void loadModel(String filename) throws IOException {
-        //model = new RandomAccessFile(filename, "r");
         File file = new File(filename);
         model = new FileInputStream(file).getChannel().map(FileChannel.MapMode.READ_ONLY, 0, file.length());
         numLabels = model.getInt(0);
         numFeatures = model.getInt(4);
-        //model.seek(4 * 2 + 8 * (long) numLabels * numFeatures);
-        lookupSize = model.getInt(4 * 2 + 8 * (numLabels * numFeatures));
+        startOfWeights = model.getInt(8);
+        labels = new Vector<String>();
+        int i = 12;
+        while(i < startOfWeights) {
+            short length = model.getShort(i);
+            byte buffer[] = new byte[length];
+            for(int j = 0; j < length; j++) {
+                buffer[j] = model.get(j + i + 2);
+            }
+            labels.add(new String(buffer, Charset.forName("UTF-8")));
+            i += length + 2;
+        }
+        lookupSize = model.getInt(startOfWeights + 8 * (numLabels * numFeatures));
         cache = new String[100000];
         weightCache = new double[100000][numLabels];
         idCache = new int[100000];
-        //System.err.printf("labels: %d, features: %d, lookup: %d, length:%d\n", numLabels, numFeatures, lookupSize, file.length());
+        System.err.printf("labels: %d, features: %d, lookup: %d, length:%d, ndeps:%d, startofweights:%d\n", numLabels, numFeatures, lookupSize, file.length(), labels.size(), startOfWeights);
     }
     String cache[];
     int idCache[];
@@ -117,14 +139,13 @@ class OnDiskModel {
             return idCache[cacheCode];
         }
         for(;; hash++) {
-            int where = 4 * 3 + 8 * (int) numLabels * numFeatures + 8 * (hash % lookupSize);
+            int where = startOfWeights + 4 + 8 * numLabels * numFeatures + 8 * (hash % lookupSize);
             //System.out.println(feature + " " + where);
             int keyLocation = (int) model.getLong(where);
             //System.out.println(keyLocation);
             if(keyLocation == 0) {
                 return -1;
             }
-            //model.seek(keyLocation);
             int length = model.getShort(keyLocation);
             //System.out.println(length);
             byte buffer[] = new byte[length];
@@ -138,8 +159,7 @@ class OnDiskModel {
             if(key.equals(feature)) {
                 int weightId = model.getInt(keyLocation + 2 + length);
                 if(weightId < 0) return -2; // this would be alarming
-                int weightLocation = 2 * 4 + weightId * numLabels * 8;
-                //model.seek(weightLocation);
+                int weightLocation = startOfWeights + weightId * numLabels * 8;
                 for(int i = 0; i < numLabels; i++) {
                     weights[i] = model.getDouble(weightLocation + i * 8);
                     weightCache[cacheCode][i] = weights[i];
@@ -160,6 +180,8 @@ class OnDiskModel {
                 for(int i = 0; i < numLabels; i++) {
                     scores[i] += weights[i];
                 }
+            } else {
+                //System.err.println("not found[" + feature + "]");
             }
         }
     }
@@ -174,24 +196,29 @@ class OnDiskModel {
                 String line;
                 BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
                 int num=1;
+                boolean inLabels = true;
                 while(null != (line = input.readLine())) {
-                    String tokens[] = line.trim().split(" ");
-                    if(tokens.length != 2) continue;
-                    double scores[] = new double[3];
-                    int id = model.getWeights(tokens[0], scores);
-                    int id2 = model.getWeights("__notfound__" + tokens[0], scores);
-                    System.out.print(tokens[0] + " " + id + " " + id2);
-                    for(int i = 0; i < scores.length; i++) {
-                        System.out.print(" " + scores[i]);
+                    if(line.trim().equals("")) {
+                        inLabels = false;
+                    } else if(!inLabels) {
+                        String tokens[] = line.trim().split(" ");
+                        if(tokens.length != 2) continue;
+                        double scores[] = new double[model.numLabels];
+                        int id = model.getWeights(tokens[0], scores);
+                        int id2 = model.getWeights("__notfound__" + tokens[0], scores);
+                        System.out.print(tokens[0] + " " + id + " " + id2);
+                        for(int i = 0; i < scores.length; i++) {
+                            System.out.print(" " + scores[i]);
+                        }
+                        System.out.println();
+                        if(Integer.parseInt(tokens[1]) != id) {
+                            System.err.printf("ERROR: %s %s != %d\n", tokens[0], tokens[1], id);
+                        } else if(id2 != -1) {
+                            System.err.printf("ERROR: __notfound__%s = %d\n", tokens[0], id2);
+                        }
+                        System.err.print("\r" + num);
+                        num++;
                     }
-                    System.out.println();
-                    if(Integer.parseInt(tokens[1]) != id) {
-                        System.err.printf("ERROR: %s %s != %d\n", tokens[0], tokens[1], id);
-                    } else if(id2 != -1) {
-                        System.err.printf("ERROR: __notfound__%s = %d\n", tokens[0], id2);
-                    }
-                    System.err.print("\r" + num);
-                    num++;
                 }
                 System.err.println("\r" + num);
             } else {

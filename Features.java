@@ -12,6 +12,7 @@ class Features {
     }
     public TObjectIntHashMap<String> featureDict = new TObjectIntHashMap<String>();
     TObjectIntHashMap<String> labelDict = new TObjectIntHashMap<String>();
+    Vector<String> labels = new Vector<String>();
     TObjectIntHashMap<String> counts = new TObjectIntHashMap<String>();
 
     public Features() {
@@ -31,20 +32,21 @@ class Features {
             } else {
                 String tokens[] = line.trim().split(" ");
                 if(pastLabels) featureDict.put(tokens[0], Integer.parseInt(tokens[1]));
-                else labelDict.put(tokens[0], Integer.parseInt(tokens[1]));
+                else {
+                    labels.add(tokens[0]);
+                    labelDict.put(tokens[0], Integer.parseInt(tokens[1]));
+                }
             }
         }
         input.close();
     }
     public void saveDict(String filename) throws IOException {
         PrintWriter output = new PrintWriter(filename);
-        TObjectIntIterator<String> iterator = labelDict.iterator();
-        for (int i = labelDict.size(); i-- > 0;) {
-            iterator.advance();
-            output.println(iterator.key() + " " + iterator.value());
+        for(int i = 0; i < labels.size(); i++) {
+            output.println(labels.get(i) + " " + i);
         }
         output.println(); // empty line
-        iterator = featureDict.iterator();
+        TObjectIntIterator iterator = featureDict.iterator();
         for (int i = featureDict.size(); i-- > 0;) {
             iterator.advance();
             output.println(iterator.key() + " " + iterator.value());
@@ -65,8 +67,17 @@ class Features {
         }
         return output;
     }
+    public String labelText(int label) {
+        return labels.get(label);
+    }
     public int mapLabel(String label) {
-        return labelDict.adjustOrPutValue(label, 0, labelDict.size());
+        if(labelDict.containsKey(label)) {
+            return labelDict.get(label);
+        } else {
+            labels.add(label);
+            labelDict.put(label, labels.size() - 1);
+            return labels.size() - 1;
+        }
     }
     public FeatureNode[] mapForLibLinear(Vector<String> features) {
         FeatureNode output[] = new FeatureNode[features.size()];
@@ -134,11 +145,11 @@ class Features {
             s0t = s0.tag;
             if(s0.leftMostChild != null) {
                 s0lc = s0.leftMostChild.tag;
-                //s0lcl = s0.leftMostChild.label;
+                s0lcl = s0.leftMostChild.label;
             }
             if(s0.rightMostChild != null) {
                 s0rc = s0.rightMostChild.tag;
-                //s0rcl = s0.rightMostChild.label;
+                s0rcl = s0.rightMostChild.label;
             }
         }
         if(stack.size() > 1) { 
@@ -147,11 +158,11 @@ class Features {
             s1t = s1.tag;
             if(s1.leftMostChild != null) {
                 s1lc = s1.leftMostChild.tag;
-                //s1lcl = s1.leftMostChild.label;
+                s1lcl = s1.leftMostChild.label;
             }
             if(s1.rightMostChild != null) {
                 s1rc = s1.rightMostChild.tag;
-                //s1rcl = s1.rightMostChild.label;
+                s1rcl = s1.rightMostChild.label;
             }
             dist = Math.abs(stack.get(stack.size() - 1).id - s1.id);
         }
@@ -218,14 +229,18 @@ class Features {
             s0t = context.stack.input.tag;
             if(context.stack.children.size() > 0) {
                 s0lc = context.stack.children.firstElement().input.tag;
+                s0lcl = context.stack.children.firstElement().label;
                 s0rc = context.stack.children.lastElement().input.tag;
+                s0rcl = context.stack.children.lastElement().label;
             }
             if(context.stack.next != null) {
                 s1w = context.stack.next.input.word;
                 s1t = context.stack.next.input.tag;
                 if(context.stack.next.children.size() > 0) {
                     s1lc = context.stack.next.children.firstElement().input.tag;
+                    s1lcl = context.stack.next.children.firstElement().label;
                     s1rc = context.stack.next.children.lastElement().input.tag;
+                    s1rcl = context.stack.next.children.lastElement().label;
                 }
                 if(context.stack.next.next != null) {
                     s2w = context.stack.next.next.input.word;

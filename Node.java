@@ -8,9 +8,9 @@ class Node implements Comparable<Node> {
     public String word, lemma, tag;
     public String label;
     public Vector<Node> children;
-    public Node previous;
+    /*public Node previous;
     public Node next;
-    public Node nextInStack;
+    public Node nextInStack;*/
     public Node leftMostChild;
     public Node rightMostChild;
     public Node(int id) {
@@ -189,13 +189,13 @@ class Node implements Comparable<Node> {
             if("".equals(line)) break;
             nodes.add(new Node(line));
         }
-        for(int i = 1; i < nodes.size(); i++) {
+        /*for(int i = 1; i < nodes.size(); i++) {
             nodes.get(i).setParent(nodes.get(nodes.get(i).parent_id));
             nodes.get(i - 1).next = nodes.get(i);
         }
         for(int i = 0; i < nodes.size() - 1; i++) {
             nodes.get(i + 1).previous = nodes.get(i);
-        }
+        }*/
         return nodes.get(0);
     }
     public boolean isProjective() {

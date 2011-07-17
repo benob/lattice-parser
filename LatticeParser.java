@@ -83,8 +83,9 @@ class LatticeParser {
         return root;
     }
 
-    public Vector<StackNode> latticePredict(InputNode inputStart) throws IOException {
-        Vector<StackNode> output = new Vector<StackNode>();
+    public Vector<TreeNode> latticePredict(InputNode inputStart) throws IOException {
+        THashMap<String, TreeNode> subtrees = new THashMap<String, TreeNode>();
+        Vector<TreeNode> output = new Vector<TreeNode>();
         Vector<ParseContext> openParses = new Vector<ParseContext>();
         // init openParses with start contexts (assumes at least one arc)
         InputArc arcTrigram[] = new InputArc[3];
@@ -136,37 +137,49 @@ class LatticeParser {
                 //if(action == 1) action = 2; // why why why
                 //else if(action == 2) action = 1;
                 if(action == -1) {
-                    output.add(context.stack); // generated a complete tree
+                    output.add(context.stack.tree); // generated a complete tree
                 } else if(action == SHIFT) {
                     //System.out.println("shift " + context.input[0].word);
-                    StackNode top = new StackNode(context.stack, context.input[0]);
+                    TreeNode top = new TreeNode(context.input[0]);
+                    if(subtrees.containsKey(top.toString())) {
+                        top = subtrees.get(top.toString());
+                    } else {
+                        subtrees.put(top.toString(), top);
+                    }
                     context.input[0] = context.input[1];
                     context.input[1] = context.input[2];
+                    StackElement stack = new StackElement(context.stack, top);
                     if(context.input[1] != null && context.input[1].next != null && context.input[1].next.outgoing.size() > 0) { // a bit tricky
                         for(InputArc arc: context.input[1].next.outgoing) {
                             context.input[2] = arc;
-                            newOpenParses.add(new ParseContext(top, context.input.clone()));
+                            newOpenParses.add(new ParseContext(stack, context.input.clone()));
                         }
                     } else {
                         context.input[2] = null;
-                        context.stack = top;
+                        context.stack = stack;
                         newOpenParses.add(context);
                     }
                 } else if((action - 1) % 2 + 1 == LEFT) {
                     //System.out.println("left " + context.stack.next.input.word + " <-(" + model2.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
-                    StackNode top = new StackNode(context.stack.next.next, context.stack.next.children, context.stack.next.input);
-                    top.children.add(context.stack);
-                    if(mode == LABELED) context.stack.label = model2.labels.get((action - 1) / 2);
-                    Collections.sort(top.children);
-                    context.stack = top;
+                    TreeNode top = context.stack.next.tree.addChild(context.stack.tree, model2.labels.get((action - 1) / 2));
+                    if(subtrees.containsKey(top.toString())) {
+                        top = subtrees.get(top.toString());
+                    } else {
+                        subtrees.put(top.toString(), top);
+                    }
+                    StackElement stack = new StackElement(context.stack.next.next, top);
+                    context.stack = stack;
                     newOpenParses.add(context);
                 } else if((action - 1) % 2 + 1 == RIGHT) {
                     //System.out.println("right " + context.stack.next.input.word + " -> " + context.stack.input.word);
-                    StackNode top = new StackNode(context.stack.next.next, context.stack.children, context.stack.input);
-                    top.children.add(context.stack.next);
-                    if(mode == LABELED) context.stack.next.label = model2.labels.get((action - 1) / 2);
-                    Collections.sort(top.children);
-                    context.stack = top;
+                    TreeNode top = context.stack.tree.addChild(context.stack.next.tree, model2.labels.get((action - 1) / 2));
+                    if(subtrees.containsKey(top.toString())) {
+                        top = subtrees.get(top.toString());
+                    } else {
+                        subtrees.put(top.toString(), top);
+                    }
+                    StackElement stack = new StackElement(context.stack.next.next, top);
+                    context.stack = stack;
                     newOpenParses.add(context);
                 } else {
                     System.err.println("ERROR: unexpected action " + action);
@@ -174,6 +187,7 @@ class LatticeParser {
             }
             openParses = newOpenParses;
         }
+        System.err.println("subtrees: " + subtrees.size());
         //System.out.println();
         return output;
     }
@@ -304,18 +318,19 @@ class LatticeParser {
         return root;
     }
 
-    public void outputForest(Vector<StackNode> forest, PrintStream output) {
-        for(StackNode node: forest) {
+    public void outputForest(Vector<TreeNode> forest, PrintStream output) {
+        for(TreeNode node: forest) {
             //System.out.println(node.toString());
         }
-        THashMap<String, StackNode> alreadyOutput = new THashMap<String, StackNode>();
-        Vector<StackNode> waitingList = new Vector<StackNode>();
+        THashMap<String, TreeNode> alreadyOutput = new THashMap<String, TreeNode>();
+        Vector<TreeNode> waitingList = new Vector<TreeNode>();
         int nextId = 1;
-        for(StackNode node: forest) {
+        for(TreeNode node: forest) {
             node.id = nextId;
             nextId++;
-            output.printf("0 %d %d:%s:%s %s\n", node.id, node.input.id, node.input.word, node.input.tag, node.label);
-            for(StackNode child: node.children) {
+            output.printf("0 %d %d:%s:%s %s\n", node.id, node.input.id, node.input.word, node.input.tag, "ROOT");
+            for(int i = 0; i < node.children.length; i++) {
+                TreeNode child = node.children[i];
                 if(!alreadyOutput.containsKey(child.toString())) {
                     alreadyOutput.put(child.toString(), child);
                     child.id = nextId;
@@ -323,14 +338,15 @@ class LatticeParser {
                     waitingList.add(child);
                 }
                 else child = alreadyOutput.get(child.toString());
-                output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, child.label);
+                output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, node.labels[i]);
             }
-            if(node.children.size() == 0) output.println(node.id);
+            if(node.children.length == 0) output.println(node.id);
         }
         while(waitingList.size() != 0) {
-            Vector<StackNode> newList = new Vector<StackNode>();
-            for(StackNode node: waitingList) {
-                for(StackNode child: node.children) {
+            Vector<TreeNode> newList = new Vector<TreeNode>();
+            for(TreeNode node: waitingList) {
+                for(int i = 0; i < node.children.length; i++) {
+                    TreeNode child = node.children[i];
                     if(!alreadyOutput.containsKey(child.toString())) {
                         alreadyOutput.put(child.toString(), child);
                         child.id = nextId;
@@ -338,16 +354,16 @@ class LatticeParser {
                         newList.add(child);
                     }
                     else child = alreadyOutput.get(child.toString());
-                    output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, child.label);
+                    output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, node.labels[i]);
                 }
-                if(node.children.size() == 0) output.println(node.id);
+                if(node.children.length == 0) output.println(node.id);
             }
             waitingList = newList;
         }
-        System.err.printf("arcs: %d, contexts: %d, stacknodes: %d, paths: %d\n", InputArc.numInstances, ParseContext.numInstances, StackNode.numInstances, forest.size());
+        System.err.printf("arcs: %d, contexts: %d, stackelement: %d, treenodes: %d, paths: %d\n", InputArc.numInstances, ParseContext.numInstances, StackElement.numInstances, TreeNode.numInstances, forest.size());
         InputArc.numInstances = 0;
         ParseContext.numInstances = 0;
-        StackNode.numInstances = 0;
+        TreeNode.numInstances = 0;
     }
 
     public Vector<Integer> oracle(Vector<Node> input) {
@@ -463,7 +479,7 @@ class LatticeParser {
             line = line.trim();
             if("".equals(line)) {
                 nodes.firstElement().number(1);
-                Vector<StackNode> forest = latticePredict(nodes.firstElement());
+                Vector<TreeNode> forest = latticePredict(nodes.firstElement());
                 outputForest(forest, System.out);
                 System.out.println();
                 nodes.clear();
@@ -481,7 +497,7 @@ class LatticeParser {
         }
         if(nodes.size() > 0) {
             nodes.firstElement().number(1);
-            Vector<StackNode> forest = latticePredict(nodes.firstElement());
+            Vector<TreeNode> forest = latticePredict(nodes.firstElement());
             outputForest(forest, System.out);
             System.out.println();
         }
@@ -507,18 +523,18 @@ class LatticeParser {
                 inputCurrent = arc.next;
             }
             start.number(1);
-            Vector<StackNode> forest = latticePredict(start);
+            Vector<TreeNode> forest = latticePredict(start);
             if(forest.size() != 0) {
-            forest.firstElement().setParentId();
-            Vector<StackNode> hypothesis = forest.firstElement().collect();
+            //forest.firstElement().setParentId();
+            Vector<TreeNode> hypothesis = forest.firstElement().collect();
             //extractFeatures(reference, oracle(reference));
             //Node predicted = predict(reference, null);//oracle(reference));
 
             //Vector<Node> hypothesis = predicted.collect();
             for(int i = 0; i < hypothesis.size(); i++) {
-                StackNode node = hypothesis.get(i);
+                TreeNode node = hypothesis.get(i);
                 //System.out.printf("%d %s %d %d\n", node.input.id, node.input.word, node.parentId, reference.get(i).parent.id);
-                if(node.parentId != reference.get(i).parent.id) errors++;
+                //if(node.parentId != reference.get(i).parent.id) errors++;
                 num++;
             }
             } else {

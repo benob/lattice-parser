@@ -225,26 +225,26 @@ class Features {
         if(context.input[2] != null) { q2w = context.input[2].word; q2t = context.input[2].tag; }
         // TODO: dependency-label-based features
         if(context.stack != null) {
-            s0w = context.stack.input.word;
-            s0t = context.stack.input.tag;
-            if(context.stack.children.size() > 0) {
-                s0lc = context.stack.children.firstElement().input.tag;
-                s0lcl = context.stack.children.firstElement().label;
-                s0rc = context.stack.children.lastElement().input.tag;
-                s0rcl = context.stack.children.lastElement().label;
+            s0w = context.stack.tree.input.word;
+            s0t = context.stack.tree.input.tag;
+            if(context.stack.tree.children.length > 0) {
+                s0lc = context.stack.tree.children[0].input.tag;
+                s0lcl = context.stack.tree.labels[0];
+                s0rc = context.stack.tree.children[context.stack.tree.children.length - 1].input.tag;
+                s0rcl = context.stack.tree.labels[context.stack.tree.labels.length - 1];
             }
             if(context.stack.next != null) {
-                s1w = context.stack.next.input.word;
-                s1t = context.stack.next.input.tag;
-                if(context.stack.next.children.size() > 0) {
-                    s1lc = context.stack.next.children.firstElement().input.tag;
-                    s1lcl = context.stack.next.children.firstElement().label;
-                    s1rc = context.stack.next.children.lastElement().input.tag;
-                    s1rcl = context.stack.next.children.lastElement().label;
+                s1w = context.stack.next.tree.input.word;
+                s1t = context.stack.next.tree.input.tag;
+                if(context.stack.next.tree.children.length > 0) {
+                    s1lc = context.stack.next.tree.children[0].input.tag;
+                    s1lcl = context.stack.next.tree.labels[0];
+                    s1rc = context.stack.next.tree.children[context.stack.next.tree.children.length - 1].input.tag;
+                    s1rcl = context.stack.next.tree.labels[context.stack.next.tree.labels.length - 1];
                 }
                 if(context.stack.next.next != null) {
-                    s2w = context.stack.next.next.input.word;
-                    s2t = context.stack.next.next.input.tag;
+                    s2w = context.stack.next.next.tree.input.word;
+                    s2t = context.stack.next.next.tree.input.tag;
                 }
             }
         }

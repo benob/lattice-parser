@@ -1,0 +1,38 @@
+binary model format:
+
+[magic:int=0xa7dcb043]
+[version:int] // = 0
+[num-sections:int]
+[section]
+[section]
+[section]
+[section]
+...
+
+section-header:
+[section-id:int]
+[next-section:int] // next section location
+
+label section (id=0): // warning: there don't need to be the same number of labels as the number of classes
+[num-labels:int]
+([label-length:short], [label-text:utf8-bytes]) * num-labels // java standard encoding for writeUTF()
+
+weight section (id=1):
+[label-type:int] // 0 = int
+[weight-type:int] // 0 = float
+[encoding:int] // 0 = sparse
+([num-weight-pairs:int], ([label-id:int], [weight:weight-type]) +) * num-features // sparse encoding of weights
+
+feature id hash table section (id=2):
+[num-features:int]
+[num-classes:int]
+[hash-table-size:int] // recommanded size > 2 * num-features
+[keys-start:int]
+([key-offset:int]) * hash-table-size // 0 indicates empty slot, key-offset is absolute
+([key-length:short], [key-text:utf8-bytes], [weight-location:int]) * num-features // weight-location is relative to weight section
+
+note: hash code computation (from java 1.5 documentation)
+Returns a hash code for this string. The hash code for a String object is computed as
+ s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]
+  using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)
+

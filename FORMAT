@@ -1,34 +1,37 @@
-binary model format:
+Simple binary format for hash-table -> vector of weights model.
+Benoit Favre <benoit.favre@lif.univ-mrs.fr> 2011-07-19
 
-[magic:int=0xa7dcb043]
-[version:int] // = 0
-[num-sections:int]
-[section]
+This file describes the binary format
+
+0 [magic:int=0xa7dcb043]
+4 [version:int] // = 0
+8 [num-sections:int]
+12 [section]
 [section]
 [section]
 [section]
 ...
 
 section-header:
-[section-id:int]
-[next-section:int] // next section location
+0 [section-id:int]
+4 [next-section:int] // next section location
 
 label section (id=0): // warning: there don't need to be the same number of labels as the number of classes
-[num-labels:int]
-([label-length:short], [label-text:utf8-bytes]) * num-labels // java standard encoding for writeUTF()
+8 [num-labels:int]
+12 ([label-length:short], [label-text:utf8-bytes]) * num-labels // java standard encoding for writeUTF()
 
 weight section (id=1):
-[label-type:int] // 0 = int
-[weight-type:int] // 0 = float
-[encoding:int] // 0 = sparse
-([num-weight-pairs:int], ([label-id:int], [weight:weight-type]) +) * num-features // sparse encoding of weights
+8 [label-type:int] // 0 = int
+12 [weight-type:int] // 0 = float
+16 [encoding:int] // 0 = sparse
+20 ([num-weight-pairs:int], ([label-id:int], [weight:weight-type]) +) * num-features // sparse encoding of weights
 
 feature id hash table section (id=2):
-[num-features:int]
-[num-classes:int]
-[hash-table-size:int] // recommanded size > 2 * num-features
-[keys-start:int]
-([key-offset:int]) * hash-table-size // 0 indicates empty slot, key-offset is absolute
+8 [num-features:int]
+12 [num-classes:int]
+16 [hash-table-size:int] // recommanded size > 2 * num-features
+20 [keys-start:int]
+24 ([key-offset:int]) * hash-table-size // 0 indicates empty slot, key-offset is absolute
 ([key-length:short], [key-text:utf8-bytes], [weight-location:int]) * num-features // weight-location is relative to weight section
 
 note: hash code computation (from java 1.5 documentation)

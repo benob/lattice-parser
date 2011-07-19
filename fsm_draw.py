@@ -1,3 +1,4 @@
+#!/usr/bin/python2
 import pygraphviz, re, sys, os
 
 graph = pygraphviz.AGraph(strict=False,directed=True,rankdir='LR', rank='min')

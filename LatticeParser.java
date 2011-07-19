@@ -110,7 +110,7 @@ class LatticeParser {
             }
         }
 
-        double scores[] = new double[model2.numLabels];
+        double scores[] = new double[model2.numClasses];
 
         while(openParses.size() > 0) {
             Vector<ParseContext> newOpenParses = new Vector<ParseContext>();
@@ -129,7 +129,7 @@ class LatticeParser {
                 }
                 int action = -1; // recompute argmax with constraints
                 //System.out.printf("available=[%s %s %s]\n", available[0], available[1], available[2]);
-                for(int candidateAction = 0; candidateAction < model2.numLabels; candidateAction ++) {
+                for(int candidateAction = 0; candidateAction < model2.numClasses; candidateAction ++) {
                     if(available[(candidateAction - 1) % 2 + 1] && (action == -1 || scores[action] < scores[candidateAction])) 
                         action = candidateAction;
                 }
@@ -461,15 +461,15 @@ class LatticeParser {
         model.save(new File(modelFileName));
         mapper.saveDict(modelFileName + ".features");
         System.out.println("creating binary model");
-        OnDiskModel.convert(modelFileName + ".features", modelFileName, modelFileName + ".binary");
+        OnDiskModel2.convert(modelFileName + ".features", modelFileName, modelFileName + ".binary");
     }
 
-    OnDiskModel model2 = new OnDiskModel();
+    OnDiskModel2 model2 = new OnDiskModel2();
     public void testLattice(String modelFilename) throws IOException {
         //System.err.print("loading model: ");
         /*mapper.loadDict("model.features");
         model = Model.load(new File("all-examples.model"));*/
-        model2 = new OnDiskModel();
+        model2 = new OnDiskModel2();
         model2.loadModel(modelFilename);
         //System.err.println("ok.");
         BufferedReader input = new BufferedReader(new InputStreamReader(System.in));

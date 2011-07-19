@@ -11,7 +11,7 @@ java -cp liblinear-1.7-with-deps.jar:trove.jar:. LatticeParser lattices/john-eat
 ideas:
 * separate stack and trees to enable more factorization during parsing
 * labeled predictions
-* improve model on-disk format
+* model on-disk format => compressed version
 * c implementation
 * incremental features
 * more factorization with hypergraphs

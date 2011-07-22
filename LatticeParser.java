@@ -18,7 +18,7 @@ class LatticeParser {
     public Model model = null;
     public int numExamples = 0;
 
-    public Node extractFeatures(Vector<Node> input, Vector<Integer> actions) {
+    public Node extractFeatures(Vector<Node> input, Vector<Integer> actions, PrintWriter output) {
         Vector<Node> stack = new Vector<Node>();
         Node root = new Node(0);
         if(input.size() == 0) return null;
@@ -44,6 +44,14 @@ class LatticeParser {
                     System.err.println("ERROR: too many training transitions " + problem.l);
                     return null;
                 }
+            }
+            if(output != null) {
+                FeatureNode featuresNodes[] = mapper.mapForLibLinear(features);
+                output.print(action + 1);
+                for(int i = 0; i < featuresNodes.length; i++) {
+                    output.printf(" %d:1", featuresNodes[i].index);
+                }
+                output.println();
             }
             if(action == SHIFT) {
                 if(start >= input.size()) {
@@ -426,7 +434,7 @@ class LatticeParser {
                 System.err.println("WARNING: skipping sentence with missing heads");
             } else {
                 sentences.add(current);
-                if(current.size() != 1) 
+                if(current.size() > 1) 
                     numExamples += current.size() * 2 - 3; // there will be twice as many actions minus 2 shifts at the begining and the root at the end
             }
         }
@@ -434,11 +442,12 @@ class LatticeParser {
         problem.x = new FeatureNode[numExamples][];
         problem.y = new int[numExamples];
         problem.l = 0;
+        PrintWriter featureFile = new PrintWriter(modelFileName + ".examples");
         for(Node sentence: sentences) {
             Vector<Node> nodes = sentence.collect();
             Vector<Integer> actions = oracle(nodes);
             if(actions != null) {
-                extractFeatures(nodes, actions);
+                extractFeatures(nodes, actions, featureFile);
             } else {
                 System.err.printf("ERROR: found a non-projective tree");
                 sentence.print(System.err);
@@ -446,20 +455,15 @@ class LatticeParser {
             }
             System.out.printf("\rfeatures: %.2f%%", 100.0 * problem.l / numExamples);
         }
+        featureFile.close();
         System.out.printf("\rfeatures: %.2f%%\n", 100.0 * problem.l / numExamples);
         problem.n = mapper.numFeatures();
-        PrintWriter featureFile = new PrintWriter(modelFileName + ".examples");
-        for(int i = 0; i < problem.l; i++) {
-            featureFile.print(problem.y[i]);
-            for(int j = 0; j < problem.x[i].length; j++) {
-                featureFile.printf(" %d:1", problem.x[i][j].index);//, problem.x[i][j].value);
-            }
-            featureFile.println();
-        }
-        featureFile.close();
         model = Linear.train(problem, new Parameter(SolverType.MCSVM_CS, 1, 0.01));
+        problem = null;
         model.save(new File(modelFileName));
+        model = null;
         mapper.saveDict(modelFileName + ".features");
+        mapper = null;
         System.out.println("creating binary model");
         OnDiskModel2.convert(modelFileName + ".features", modelFileName, modelFileName + ".binary");
     }

@@ -12,7 +12,7 @@ class Features {
     }
     public TObjectIntHashMap<String> featureDict = new TObjectIntHashMap<String>();
     TObjectIntHashMap<String> labelDict = new TObjectIntHashMap<String>();
-    Vector<String> labels = new Vector<String>();
+    public Vector<String> labels = new Vector<String>();
     TObjectIntHashMap<String> counts = new TObjectIntHashMap<String>();
 
     public Features() {

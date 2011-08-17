@@ -81,7 +81,7 @@ class OnDiskModel2 {
         output.writeInt(WEIGHT_TYPE_DOUBLE);
         output.writeInt(WEIGHT_ENCODING_SPARSE);
 
-        TObjectIntHashMap<String> weightLocation = new TObjectIntHashMap();
+        TObjectIntHashMap<String> weightLocation = new TObjectIntHashMap<String>();
         TObjectIntIterator<String> iterator = features.featureDict.iterator();
         for (int i = 0; i < numFeatures; i++) {
             iterator.advance();

@@ -15,81 +15,11 @@ class LatticeParser {
 
     public Features mapper = new Features();
     public Problem problem = new Problem();
-    public Model model = null;
+    public Model libLinearModel = null;
     public int numExamples = 0;
 
-    /*public void extractFeatures(Vector<Node> input, Vector<Integer> actions, PrintWriter output) {
-        Vector<Node> stack = new Vector<Node>();
-        Node root = new Node(0);
-        if(input.size() == 0) return;
-        if(input.size() == 1) {
-            Node node = new Node(input.get(0));
-            node.setParent(root);
-            return;
-        }
-        stack.add(new Node(input.get(0)));
-        stack.add(new Node(input.get(1)));
-        int start = 2;
-        for(int action: actions) {
-            String label = null;
-            Vector<String> features = mapper.getRegularFeatures(stack, input, start);
-            //for(String feature: features) { System.out.printf("%s ", feature); } System.out.println();
-            if(model == null) {
-                if(problem.l < problem.x.length) {
-                    if(action < 0) System.out.println("ERROR: action < 0");
-                    problem.x[problem.l] = mapper.mapForLibLinear(features);
-                    problem.y[problem.l] = action + 1;
-                    problem.l++;
-                } else {
-                    System.err.println("ERROR: too many training transitions " + problem.l);
-                    return;
-                }
-            }
-            if(output != null) {
-                FeatureNode featuresNodes[] = mapper.mapForLibLinear(features);
-                output.print(action + 1);
-                for(int i = 0; i < featuresNodes.length; i++) {
-                    output.printf(" %d:1", featuresNodes[i].index);
-                }
-                output.println();
-            }
-            if(action == SHIFT) {
-                if(start >= input.size()) {
-                    System.err.printf("ERROR: impossible action \"SHIFT\", start >= input.size()\n");
-                    return;
-                }
-                stack.add(new Node(input.get(start)));
-                start++;
-            } else if((action - 1) % 2 + 1 == LEFT) {
-                if(stack.size() < 2) {
-                    System.err.printf("ERROR: impossible action \"LEFT\", stack.size() < 2\n");
-                    return;
-                }
-                Node first = stack.get(stack.size() - 1);
-                Node second = stack.get(stack.size() - 2);
-                first.setParent(second);
-                if(mode == LABELED) label = mapper.labelText((action - 1) / 2);
-                first.label = label;
-                stack.set(stack.size() - 2, second);
-                stack.remove(stack.size() - 1);
-            } else if((action - 1) % 2 + 1 == RIGHT) {
-                if(stack.size() < 2) {
-                    System.err.printf("ERROR: impossible action \"RIGHT\", stack.size() < 2\n");
-                    return;
-                }
-                Node first = stack.get(stack.size() - 1);
-                Node second = stack.get(stack.size() - 2);
-                second.setParent(first);
-                if(mode == LABELED) label = mapper.labelText((action - 1) / 2);
-                second.label = label;
-                stack.set(stack.size() - 2, first);
-                stack.remove(stack.size() - 1);
-            }
-        }
-    }*/
-
     public Vector<TreeNode> latticePredict(InputNode inputStart, Vector<Integer> actions, PrintWriter featureOutput) throws IOException {
-        if(actions == null) mapper.labels = model2.labels;
+        if(actions == null) mapper.labels = binaryModel.labels;
         int currentAction = 0;
         THashMap<String, TreeNode> subtrees = new THashMap<String, TreeNode>();
         Vector<TreeNode> output = new Vector<TreeNode>();
@@ -117,7 +47,7 @@ class LatticeParser {
             }
         }
 
-        double scores[] = new double[model2.numClasses];
+        double scores[] = new double[binaryModel.numClasses];
 
         while(openParses.size() > 0) {
             Vector<ParseContext> newOpenParses = new Vector<ParseContext>();
@@ -141,7 +71,7 @@ class LatticeParser {
                         }
                     }
                 } else {
-                    model2.predict(features, scores);
+                    binaryModel.predict(features, scores);
                     boolean available[] = new boolean[3];
                     Arrays.fill(available, true);
                     if(context.input[0] == null) available[SHIFT] = false;
@@ -149,7 +79,7 @@ class LatticeParser {
                         available[LEFT] = false;
                         available[RIGHT] = false;
                     }
-                    for(int candidateAction = 0; candidateAction < model2.numClasses; candidateAction ++) {
+                    for(int candidateAction = 0; candidateAction < binaryModel.numClasses; candidateAction ++) {
                         if(available[(candidateAction - 1) % 2 + 1] && (action == -1 || scores[action] < scores[candidateAction])) 
                             action = candidateAction;
                     }
@@ -186,7 +116,7 @@ class LatticeParser {
                         newOpenParses.add(context);
                     }
                 } else if((action - 1) % 2 + 1 == LEFT) {
-                    //System.out.println("left " + context.stack.next.input.word + " <-(" + model2.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
+                    //System.out.println("left " + context.stack.next.input.word + " <-(" + binaryModel.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
                     TreeNode top = context.stack.next.tree.addChild(context.stack.tree, mapper.labels.get((action - 1) / 2));
                     if(subtrees.containsKey(top.toString())) {
                         top = subtrees.get(top.toString());
@@ -239,7 +169,7 @@ class LatticeParser {
             Vector<String> features = Features.getRegularFeatures(stack, input, start);
             //for(String feature: features) { System.out.printf("%s ", feature); } System.out.println();
             FeatureNode[] featureIds = mapper.mapForLibLinear(features);
-            int action = Linear.predictValues(model, mapper.mapForLibLinear(features), scores) - 1;
+            int action = Linear.predictValues(libLinearModel, mapper.mapForLibLinear(features), scores) - 1;
             boolean available[] = new boolean[numActions + 1];
             Arrays.fill(available, true);
             if(start >= input.size()) available[SHIFT] = false;
@@ -492,23 +422,20 @@ class LatticeParser {
         System.out.printf("\rfeatures: %.2f%%\n", 100.0 * problem.l / numExamples);
         System.out.println(problem.l + " " + problem.x.length);
         problem.n = mapper.numFeatures();
-        model = Linear.train(problem, new Parameter(SolverType.MCSVM_CS, 1, 0.01));
+        libLinearModel = Linear.train(problem, new Parameter(SolverType.MCSVM_CS, 1, 0.01));
         problem = null;
-        model.save(new File(modelFileName));
-        model = null;
+        libLinearModel.save(new File(modelFileName));
+        libLinearModel = null;
         mapper.saveDict(modelFileName + ".features");
         mapper = null;
         System.out.println("creating binary model");
-        OnDiskModel2.convert(modelFileName + ".features", modelFileName, modelFileName + ".binary");
+        BinaryModel.convert(modelFileName + ".features", modelFileName, modelFileName + ".binary");
     }
 
-    OnDiskModel2 model2 = new OnDiskModel2();
+    BinaryModel binaryModel = new BinaryModel();
     public void testLattice(String modelFilename) throws IOException {
-        //System.err.print("loading model: ");
-        /*mapper.loadDict("model.features");
-          model = Model.load(new File("all-examples.model"));*/
-        model2 = new OnDiskModel2();
-        model2.loadModel(modelFilename);
+        binaryModel = new BinaryModel();
+        binaryModel.loadModel(modelFilename);
         //System.err.println("ok.");
         BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
         String line;
@@ -541,11 +468,12 @@ class LatticeParser {
         }
     }
 
-    public void test(String filename) throws IOException {
-        /*System.out.print("loading model: ");
-          mapper.loadDict("model.features");
-          model = Model.load(new File("all-examples.model"));
-          System.out.println("ok.");*/
+    // predict trees from a conll05 input file
+    public void test(String filename, String modelFilename) throws IOException {
+        if(modelFilename != null) {
+            binaryModel = new BinaryModel();
+            binaryModel.loadModel(modelFilename);
+        }
         Node current;
         BufferedReader input = new BufferedReader(new FileReader(filename));
         int num = 0, errors = 0;
@@ -563,14 +491,14 @@ class LatticeParser {
             start.number(1);
             Vector<TreeNode> forest = latticePredict(start, null, null);
             if(forest.size() != 0) {
-                //forest.firstElement().setParentId();
+                forest.firstElement().setParentId(0);
                 Vector<TreeNode> hypothesis = forest.firstElement().collect();
 
                 //Vector<Node> hypothesis = predicted.collect();
                 for(int i = 0; i < hypothesis.size(); i++) {
                     TreeNode node = hypothesis.get(i);
                     //System.out.printf("%d %s %d %d\n", node.input.id, node.input.word, node.parentId, reference.get(i).parent.id);
-                    //if(node.parentId != reference.get(i).parent.id) errors++;
+                    if(node.parentId != reference.get(i).parent.id) errors++;
                     num++;
                 }
             } else {
@@ -589,9 +517,12 @@ class LatticeParser {
                 parser.testLattice(args[0]);
             } else if(args.length == 2) {
                 parser.train(args[0], args[1]);
+            } else if(args.length == 3 && args[0].equals("--eval")) {
+                parser.test(args[2], args[1]);
             } else {
                 System.err.println("train: java LatticeParser projective-trees-conll05 model");
                 System.err.println("predict: java LatticeParser model < input");
+                System.err.println("evaluate: java LatticeParser --eval model test-trees-conll05");
                 System.exit(1);
             }
         } catch (IOException e) {

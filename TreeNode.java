@@ -10,6 +10,7 @@ class TreeNode implements Comparable<TreeNode> {
      public InputArc input = null;
      public String representation = null;
      int id = 0;
+     int parentId = 0;
 
      public int compareTo(TreeNode other)
      {
@@ -98,6 +99,13 @@ class TreeNode implements Comparable<TreeNode> {
          }
          Collections.sort(output);
          return output;
+     }
+
+     public void setParentId(int id) {
+         parentId = id;
+         for(TreeNode child: children) {
+             child.setParentId(this.input.id);
+         }
      }
 
 }

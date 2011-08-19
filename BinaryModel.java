@@ -6,7 +6,7 @@ import java.util.*;
 import gnu.trove.*;
 //switched to mmap which is not faster
 
-class OnDiskModel2 {
+class BinaryModel {
     // only works for correct model files, and dense labels!
     static int MAGIC = 0xa7dcb043;
     static int VERSION = 0;
@@ -154,6 +154,7 @@ class OnDiskModel2 {
     int tableSectionLocation = -1;
     MappedByteBuffer model;
     Charset utf8 = Charset.forName("utf-8");
+
     void loadModel(String filename) throws IOException {
         File file = new File(filename);
         model = new FileInputStream(file).getChannel().map(FileChannel.MapMode.READ_ONLY, 0, file.length());
@@ -222,7 +223,7 @@ class OnDiskModel2 {
         int hash = Math.abs(feature.hashCode());
         int cacheCode = hash % cache.length;
         if(feature.equals(cache[cacheCode])) {
-            for(int i = 0; i < numClasses; i++) weights[i] = weightCache[cacheCode][i];
+            //for(int i = 0; i < numClasses; i++) weights[i] = weightCache[cacheCode][i];
             System.arraycopy(weightCache[cacheCode], 0, weights, 0, numClasses);
         }
         for(;; hash++) {
@@ -272,7 +273,7 @@ class OnDiskModel2 {
             if(args.length == 3) {
                 convert(args[0], args[1], args[2]);
             } else if(args.length == 1) {
-                OnDiskModel2 model = new OnDiskModel2();
+                BinaryModel model = new BinaryModel();
                 model.loadModel(args[0]);
                 String line;
                 BufferedReader input = new BufferedReader(new InputStreamReader(System.in));

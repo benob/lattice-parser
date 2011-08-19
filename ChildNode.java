@@ -1,11 +1,22 @@
+import java.util.*;
 class ChildNode implements Iterable {
-    class ChildNodeIterator<ChildNode> {
+    class ChildNodeIterator implements Iterator<ChildNode> {
         ChildNode node;
-        ChildNode next() {
-            return node.next;
+        public ChildNode next() {
+            ChildNode saved = node;
+            node = node.next;
+            return saved;
+        }
+        public boolean hasNext() {
+            return node != null;
+        }
+        public void remove() {
+        }
+        public ChildNodeIterator(ChildNode node) {
+            this.node = node;
         }
     }
-    public ChildNodeIterator<ChildNode> iterator() {
+    public ChildNodeIterator iterator() {
         return new ChildNodeIterator(this);
     }
     public TreeNode node;

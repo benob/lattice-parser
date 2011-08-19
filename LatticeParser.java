@@ -21,7 +21,6 @@ class LatticeParser {
     public Vector<TreeNode> latticePredict(InputNode inputStart, Vector<Integer> actions, PrintWriter featureOutput) throws IOException {
         if(actions == null) mapper.labels = binaryModel.labels;
         int currentAction = 0;
-        THashMap<String, TreeNode> subtrees = new THashMap<String, TreeNode>();
         Vector<TreeNode> output = new Vector<TreeNode>();
         Vector<ParseContext> openParses = new Vector<ParseContext>();
         // init openParses with start contexts (assumes at least one arc)
@@ -97,11 +96,6 @@ class LatticeParser {
                 } else if(action == SHIFT) {
                     //System.out.println("shift " + context.input[0].word);
                     TreeNode top = new TreeNode(context.input[0]);
-                    if(subtrees.containsKey(top.toString())) {
-                        top = subtrees.get(top.toString());
-                    } else {
-                        subtrees.put(top.toString(), top);
-                    }
                     context.input[0] = context.input[1];
                     context.input[1] = context.input[2];
                     StackElement stack = new StackElement(context.stack, top);
@@ -118,22 +112,12 @@ class LatticeParser {
                 } else if((action - 1) % 2 + 1 == LEFT) {
                     //System.out.println("left " + context.stack.next.input.word + " <-(" + binaryModel.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
                     TreeNode top = context.stack.next.tree.addChild(context.stack.tree, mapper.labels.get((action - 1) / 2));
-                    if(subtrees.containsKey(top.toString())) {
-                        top = subtrees.get(top.toString());
-                    } else {
-                        subtrees.put(top.toString(), top);
-                    }
                     StackElement stack = new StackElement(context.stack.next.next, top);
                     context.stack = stack;
                     newOpenParses.add(context);
                 } else if((action - 1) % 2 + 1 == RIGHT) {
                     //System.out.println("right " + context.stack.next.input.word + " -> " + context.stack.input.word);
                     TreeNode top = context.stack.tree.addChild(context.stack.next.tree, mapper.labels.get((action - 1) / 2));
-                    if(subtrees.containsKey(top.toString())) {
-                        top = subtrees.get(top.toString());
-                    } else {
-                        subtrees.put(top.toString(), top);
-                    }
                     StackElement stack = new StackElement(context.stack.next.next, top);
                     context.stack = stack;
                     newOpenParses.add(context);
@@ -146,81 +130,7 @@ class LatticeParser {
         if(actions != null && currentAction != actions.size()) {
             System.err.printf("\rWARNING: num actions %d != effective actions %d\n", actions.size(), currentAction);
         }
-        //System.err.println("subtrees: " + subtrees.size());
-        //System.out.println();
         return output;
-    }
-
-    public Node predict(Vector<Node> input, Vector<Integer> actions) {
-        Vector<Node> stack = new Vector<Node>();
-        Node root = new Node(0);
-        if(input.size() == 0) return null;
-        if(input.size() == 1) {
-            Node node = new Node(input.get(0));
-            node.setParent(root);
-            return root;
-        }
-        stack.add(new Node(input.get(0)));
-        stack.add(new Node(input.get(1)));
-        int start = 2;
-        int currentAction = 0;
-        double scores[] = new double[numActions + 1];
-        while(stack.size() > 1 || start < input.size()) {
-            Vector<String> features = Features.getRegularFeatures(stack, input, start);
-            //for(String feature: features) { System.out.printf("%s ", feature); } System.out.println();
-            FeatureNode[] featureIds = mapper.mapForLibLinear(features);
-            int action = Linear.predictValues(libLinearModel, mapper.mapForLibLinear(features), scores) - 1;
-            boolean available[] = new boolean[numActions + 1];
-            Arrays.fill(available, true);
-            if(start >= input.size()) available[SHIFT] = false;
-            if(stack.size() < 2) {
-                available[LEFT] = false;
-                available[RIGHT] = false;
-            }
-            action = -1; // recompute argmax with constraints
-            //System.out.printf("available=[%s %s %s]\n", available[0], available[1], available[2]);
-            for(int candidateAction = 0; candidateAction < numActions; candidateAction ++) {
-                if(available[candidateAction] && (action == -1 || scores[action] < scores[candidateAction])) 
-                    action = candidateAction;
-            }
-            if(action == 1) action = 2;
-            else if(action == 2) action = 1;
-            if(actions != null && actions.size() > currentAction) {
-                System.out.printf("%d a=%d o=%d [%f %f %f %f]", currentAction, action, actions.get(currentAction), scores[0], scores[1], scores[2], scores[3]);
-                System.out.print(action + 1);
-                for(int i = 0; i < featureIds.length; i++) {
-                    System.out.printf(" %d:%d", featureIds[i].index, (int) featureIds[i].value);
-                }
-                System.out.println();
-            }
-            currentAction++;
-            String label = null; // need to predict label
-            if(action == SHIFT) {
-                //System.out.println("shift " + input.get(start).word);
-                stack.add(new Node(input.get(start)));
-                start++;
-            } else if(action == LEFT) {
-                Node first = stack.get(stack.size() - 1);
-                Node second = stack.get(stack.size() - 2);
-                //System.out.println("left " + second.word + " <- " + first.word);
-                first.setParent(second);
-                first.label = label;
-                stack.set(stack.size() - 2, second);
-                stack.remove(stack.size() - 1);
-            } else if(action == RIGHT) {
-                Node first = stack.get(stack.size() - 1);
-                Node second = stack.get(stack.size() - 2);
-                //System.out.println("right " + second.word + " -> " + first.word);
-                second.setParent(first);
-                second.label = label;
-                stack.set(stack.size() - 2, first);
-                stack.remove(stack.size() - 1);
-            }
-        }
-        Node node = stack.get(0);
-        node.setParent(root);
-        System.out.println();
-        return root;
     }
 
     public Node replay(Vector<Node> input, Vector<Integer> actions) {
@@ -281,41 +191,43 @@ class LatticeParser {
         for(TreeNode node: forest) {
             //System.out.println(node.toString());
         }
-        THashMap<String, TreeNode> alreadyOutput = new THashMap<String, TreeNode>();
+        THashMap<String, ChildNode> alreadyOutput = new THashMap<String, ChildNode>();
         Vector<TreeNode> waitingList = new Vector<TreeNode>();
         int nextId = 1;
         for(TreeNode node: forest) {
             node.id = nextId;
             nextId++;
             output.printf("0 %d %d:%s:%s %s\n", node.id, node.input.id, node.input.word, node.input.tag, "ROOT");
-            for(int i = 0; i < node.children.length; i++) {
-                TreeNode child = node.children[i];
-                if(!alreadyOutput.containsKey(child.toString())) {
-                    alreadyOutput.put(child.toString(), child);
-                    child.id = nextId;
-                    nextId++;
-                    waitingList.add(child);
+            if(node.numChildren() == 0) output.println(node.id);
+            else {
+                for(ChildNode child: node.children) {
+                    if(!alreadyOutput.containsKey(child.toString())) {
+                        alreadyOutput.put(child.toString(), child);
+                        child.node.id = nextId;
+                        nextId++;
+                        waitingList.add(child.node);
+                    }
+                    else child = alreadyOutput.get(child.toString());
+                    output.printf("%d %d %d:%s:%s %s\n", node.id, child.node.id, child.node.input.id, child.node.input.word, child.node.input.tag, child.label);
                 }
-                else child = alreadyOutput.get(child.toString());
-                output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, node.labels[i]);
             }
-            if(node.children.length == 0) output.println(node.id);
         }
         while(waitingList.size() != 0) {
             Vector<TreeNode> newList = new Vector<TreeNode>();
             for(TreeNode node: waitingList) {
-                for(int i = 0; i < node.children.length; i++) {
-                    TreeNode child = node.children[i];
-                    if(!alreadyOutput.containsKey(child.toString())) {
-                        alreadyOutput.put(child.toString(), child);
-                        child.id = nextId;
-                        nextId++;
-                        newList.add(child);
+                if(node.numChildren() == 0) output.println(node.id);
+                else {
+                    for(ChildNode child: node.children) {
+                        if(!alreadyOutput.containsKey(child.toString())) {
+                            alreadyOutput.put(child.toString(), child);
+                            child.node.id = nextId;
+                            nextId++;
+                            newList.add(child.node);
+                        }
+                        else child = alreadyOutput.get(child.toString());
+                        output.printf("%d %d %d:%s:%s %s\n", node.id, child.node.id, child.node.input.id, child.node.input.word, child.node.input.tag, child.label);
                     }
-                    else child = alreadyOutput.get(child.toString());
-                    output.printf("%d %d %d:%s:%s %s\n", node.id, child.id, child.input.id, child.input.word, child.input.tag, node.labels[i]);
                 }
-                if(node.children.length == 0) output.println(node.id);
             }
             waitingList = newList;
         }
@@ -433,11 +345,10 @@ class LatticeParser {
     }
 
     BinaryModel binaryModel = new BinaryModel();
-    public void testLattice(String modelFilename) throws IOException {
+    public void testLattice(String modelFilename, BufferedReader input) throws IOException {
         binaryModel = new BinaryModel();
         binaryModel.loadModel(modelFilename);
         //System.err.println("ok.");
-        BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
         String line;
         Vector<InputNode> nodes = new Vector<InputNode>();
         while(null != (line = input.readLine())) {
@@ -514,13 +425,17 @@ class LatticeParser {
             LatticeParser parser = new LatticeParser();
             //parser.test(args[1]);
             if(args.length == 1) {
-                parser.testLattice(args[0]);
+                BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
+                parser.testLattice(args[0], input);
             } else if(args.length == 2) {
+                BufferedReader input = new BufferedReader(new FileReader(args[1]));
+                parser.testLattice(args[0], input);
+            } else if(args.length == 3 && args[0].equals("--train")) {
                 parser.train(args[0], args[1]);
             } else if(args.length == 3 && args[0].equals("--eval")) {
                 parser.test(args[2], args[1]);
             } else {
-                System.err.println("train: java LatticeParser projective-trees-conll05 model");
+                System.err.println("train: java LatticeParser --train projective-trees-conll05 model");
                 System.err.println("predict: java LatticeParser model < input");
                 System.err.println("evaluate: java LatticeParser --eval model test-trees-conll05");
                 System.exit(1);

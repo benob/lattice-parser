@@ -1,6 +1,6 @@
 import java.util.*;
-class ChildNode implements Iterable {
-    class ChildNodeIterator implements Iterator<ChildNode> {
+class ChildNode implements Iterable<ChildNode> {
+    public class ChildNodeIterator implements Iterator<ChildNode> {
         ChildNode node;
         public ChildNode next() {
             ChildNode saved = node;
@@ -26,5 +26,8 @@ class ChildNode implements Iterable {
         this.node = node;
         this.label = label;
         this.next = next;
+    }
+    public String toString() {
+        return label + ":" + node.toString();
     }
 }

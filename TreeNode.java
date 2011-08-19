@@ -5,8 +5,7 @@ import java.util.Vector;
 class TreeNode implements Comparable<TreeNode> {
      public static int numInstances = 0;
 
-     public TreeNode[] children = null;
-     public String[] labels = null;
+     public ChildNode children = null;
      public InputArc input = null;
      public String representation = null;
      int id = 0;
@@ -23,10 +22,12 @@ class TreeNode implements Comparable<TreeNode> {
          if (this.representation != null) return this.representation;
          StringBuilder output = new StringBuilder("(");
          output.append(this.input.id);
-         for (int i = 0; i < this.children.length; i++) {
-             output.append(this.labels[i]);
-             output.append(":");
-             output.append(this.children[i].toString());
+         if(children != null) {
+             for (ChildNode child: children) {
+                 output.append(child.label);
+                 output.append(":");
+                 output.append(child.node.toString());
+             }
          }
          output.append(")");
          this.representation = output.toString();
@@ -35,50 +36,21 @@ class TreeNode implements Comparable<TreeNode> {
 
      public TreeNode(TreeNode other) {
          numInstances += 1;
-         this.children = ((TreeNode[])(TreeNode[])other.children.clone());
-         this.labels = ((String[])(String[])other.labels.clone());
+         this.children = other.children;
          this.input = other.input;
          this.representation = other.representation;
      }
 
      public TreeNode(TreeNode other, TreeNode child, String label) {
          numInstances += 1;
-         this.children = new TreeNode[other.children.length + 1];
-         this.labels = new String[other.labels.length + 1];
-         if (other.children.length == 0) {
-             this.children[0] = child;
-             this.labels[0] = label;
-         } else {
-             boolean done = false;
-             for (int i = 0; i < other.children.length; i++) {
-                 if (other.children[i].input.id < child.input.id) {
-                     this.children[i] = other.children[i];
-                     this.labels[i] = other.labels[i];
-                 } else {
-                     if (!done) {
-                         this.children[i] = child;
-                         this.labels[i] = label;
-                         done = true;
-                     }
-                     this.children[(i + 1)] = other.children[i];
-                     this.labels[(i + 1)] = other.labels[i];
-                 }
-             }
-             if (!done) {
-                 this.children[(this.children.length - 1)] = child;
-                 this.labels[(this.labels.length - 1)] = label;
-             }
-         }
          this.input = other.input;
-         toString();
+         this.children = new ChildNode(child, label, other.children);
      }
 
      public TreeNode(InputArc input) {
          numInstances += 1;
-         this.children = new TreeNode[0];
-         this.labels = new String[0];
+         this.children = null;
          this.input = input;
-         toString();
      }
 
      public TreeNode addChild(TreeNode child, String label) {
@@ -86,16 +58,16 @@ class TreeNode implements Comparable<TreeNode> {
      }
 
      public void print(int parent) {
-         System.out.println(new StringBuilder().append(this.input.id).append(" ").append(this.input.word).append(" ").append(parent).toString());
-         for (TreeNode child : this.children)
-             child.print(this.input.id);
+         System.out.println(new StringBuilder().append(input.id).append(" ").append(input.word).append(" ").append(parent).toString());
+         for (ChildNode child : children)
+             child.node.print(input.id);
      }
 
      public Vector<TreeNode> collect() {
          Vector<TreeNode> output = new Vector<TreeNode>();
          output.add(this);
-         for (TreeNode child : this.children) {
-             output.addAll(child.collect());
+         for (ChildNode child: children) {
+             output.addAll(child.node.collect());
          }
          Collections.sort(output);
          return output;
@@ -103,10 +75,41 @@ class TreeNode implements Comparable<TreeNode> {
 
      public void setParentId(int id) {
          parentId = id;
-         for(TreeNode child: children) {
-             child.setParentId(this.input.id);
+         for(ChildNode child: children) {
+             child.node.setParentId(this.input.id);
          }
      }
 
+     public ChildNode rightMostChild() {
+         int max = 0;
+         ChildNode argmax = null;
+         for(ChildNode child: children) {
+             if(argmax == null || child.node.input.id > max) {
+                 max = child.node.input.id;
+                 argmax = child;
+             }
+         }
+         return argmax;
+     }
+
+     public ChildNode leftMostChild() {
+         int min = 0;
+         ChildNode argmin = null;
+         for(ChildNode child: children) {
+             if(argmin == null || child.node.input.id < min) {
+                 min = child.node.input.id;
+                 argmin = child;
+             }
+         }
+         return argmin;
+     }
+     public int numChildren() {
+         if(children == null) return 0;
+         int num = 0;
+         for(ChildNode child: children) {
+             num++;
+         }
+         return num;
+     }
 }
 

@@ -1,5 +1,6 @@
-WARNING: liblinear fills the scores[] table with a different order than the label order.
+WARNING: liblinear fills the scores[] table with a different order than the label order. (file a bug report)
 
+2011-08-19: uniformized trainer and decoder, simplified data structures
 2011-07-14: can parse macaon lattices in fr/en; can output a factorized tree (not a graph)
 2011-07-13: factorize output using a subtree representation as hash keys
 2011-07-12: lazy loading of the model (ModelOnDisk) 
@@ -49,3 +50,5 @@ java -jar malt-1.5.2/malt.jar -c pproj -m proj -i data/ftb6.test.conll05 -o data
 java -jar lattice-parser.jar data/ftb6.train.conll05.projective ftb.model
 echo "Jean regarde l'homme qui mange une glace avec des jumelles." | txt2macaon | maca_segmenter | maca_tokenizer | maca_lexer | maca_tagger | macaon2htk -p | perl htk2fsm.perl | java -jar lattice-parser.jar ftb.model.binary | python2 fsm_draw.py
 echo "Jean likes to eat potatoes." | /data/demo-macaon/translation/maca_translate --text --model en-fr --prune 20 | maca_lexer -t -n -1 | maca_tagger -n 20 | macaon2htk -p | perl htk2fsm.perl | java -jar lattice-parser.jar ftb.model.binary | python2 fsm_draw.py
+
+hypergraph file format:

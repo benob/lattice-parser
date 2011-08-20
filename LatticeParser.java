@@ -188,44 +188,41 @@ class LatticeParser {
     }
 
     public void outputForest(Vector<TreeNode> forest, PrintStream output) {
-        for(TreeNode node: forest) {
-            //System.out.println(node.toString());
-        }
-        THashMap<String, ChildNode> alreadyOutput = new THashMap<String, ChildNode>();
+        THashMap<String, TreeNode> alreadyOutput = new THashMap<String, TreeNode>();
+        THashMap<String, Integer> nodeId = new THashMap<String, Integer>();
         Vector<TreeNode> waitingList = new Vector<TreeNode>();
         int nextId = 1;
         for(TreeNode node: forest) {
-            node.id = nextId;
-            nextId++;
-            output.printf("0 %d %d:%s:%s %s\n", node.id, node.input.id, node.input.word, node.input.tag, "ROOT");
-            if(node.numChildren() == 0) output.println(node.id);
-            else {
-                for(ChildNode child: node.children) {
-                    if(!alreadyOutput.containsKey(child.toString())) {
-                        alreadyOutput.put(child.toString(), child);
-                        child.node.id = nextId;
-                        nextId++;
-                        waitingList.add(child.node);
-                    }
-                    else child = alreadyOutput.get(child.toString());
-                    output.printf("%d %d %d:%s:%s %s\n", node.id, child.node.id, child.node.input.id, child.node.input.word, child.node.input.tag, child.label);
-                }
+            System.err.println(node.toString());
+            for(TreeNode child: node.collect()) {
+                System.err.print(child.input.word + " ");
+            }
+            System.err.println();
+            if(nodeId.containsKey(node.toString())) {
+                node.id = nodeId.get(node.toString());
+            } else {
+                node.id = nextId++;
+                nodeId.put(node.toString(), node.id);
+                waitingList.add(node);
+                output.printf("%d %d %d:%s:%s %s\n", nextId++, node.id, node.input.id, node.input.word, node.input.tag, "ROOT");
             }
         }
         while(waitingList.size() != 0) {
             Vector<TreeNode> newList = new Vector<TreeNode>();
             for(TreeNode node: waitingList) {
-                if(node.numChildren() == 0) output.println(node.id);
+                if(node.numChildren() == 0); // output.println(node.id); // final state
                 else {
                     for(ChildNode child: node.children) {
-                        if(!alreadyOutput.containsKey(child.toString())) {
-                            alreadyOutput.put(child.toString(), child);
-                            child.node.id = nextId;
-                            nextId++;
+                        int startId = node.id;
+                        System.err.println(child.toString() + " " + child.node.toString());
+                        if(child.node.children != null && nodeId.containsKey(child.toString())) {
+                            child.node.id = nodeId.get(child.toString());
+                        } else {
+                            child.node.id = nextId++;
+                            nodeId.put(child.toString(), child.node.id);
                             newList.add(child.node);
                         }
-                        else child = alreadyOutput.get(child.toString());
-                        output.printf("%d %d %d:%s:%s %s\n", node.id, child.node.id, child.node.input.id, child.node.input.word, child.node.input.tag, child.label);
+                        output.printf("%d %d %d:%s:%s %s\n", startId, child.node.id, child.node.input.id, child.node.input.word, child.node.input.tag, child.label);
                     }
                 }
             }

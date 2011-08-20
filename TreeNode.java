@@ -20,16 +20,17 @@ class TreeNode implements Comparable<TreeNode> {
      public String toString()
      {
          if (this.representation != null) return this.representation;
-         StringBuilder output = new StringBuilder("(");
-         output.append(this.input.id);
+         StringBuilder output = new StringBuilder();
+         //output.append(input.id);
+         output.append(input.toString());
          if(children != null) {
+             output.append("(");
              for (ChildNode child: children) {
-                 output.append(child.label);
-                 output.append(":");
-                 output.append(child.node.toString());
+                 output.append(child.label + "/" + child.node.toString());
+                 output.append(",");
              }
+             output.append(")");
          }
-         output.append(")");
          this.representation = output.toString();
          return this.representation;
      }
@@ -66,8 +67,10 @@ class TreeNode implements Comparable<TreeNode> {
      public Vector<TreeNode> collect() {
          Vector<TreeNode> output = new Vector<TreeNode>();
          output.add(this);
-         for (ChildNode child: children) {
-             output.addAll(child.node.collect());
+         if(children != null) {
+             for (ChildNode child: children) {
+                 output.addAll(child.node.collect());
+             }
          }
          Collections.sort(output);
          return output;

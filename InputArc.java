@@ -13,4 +13,7 @@ class InputArc {
         this.tag = tag;
         this.next = next;
     }
+    public String toString() {
+        return "" + id + ":" + word + ":" + tag;
+    }
 }

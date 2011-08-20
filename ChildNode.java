@@ -27,7 +27,16 @@ class ChildNode implements Iterable<ChildNode> {
         this.label = label;
         this.next = next;
     }
+    // WARNING: only children of node
     public String toString() {
-        return label + ":" + node.toString();
+         StringBuilder output = new StringBuilder();
+         if(node.children != null) {
+             for (ChildNode child: node.children) {
+                 output.append(child.node.toString());
+                 output.append(",");
+             }
+         }
+        return output.toString();
+        //return label + "/" + node.toString();
     }
 }

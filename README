@@ -1,21 +1,60 @@
-WARNING: liblinear fills the scores[] table with a different order than the label order. (file a bug report)
+Transition-based parser for word lattices
+====================================
+by Benoit Favre <benoit.favre@lif.univ-mrs.fr> 2011-08-29
 
+This program is a dependency parser using the transition-based framework by
+Nivre et al. that can process word lattices. For each path in the lattice, it
+produces the greedy 1-best sequence of transition, resulting in a parse tree.
+The output is represented as a minimal hypergraph containing all the parses.
+
+License: GPL v3
+Dependences: java 1.5+
+
+
+News
+====
+
+2011-08-29: correct hypergraph output from tree-merger
 2011-08-19: uniformized trainer and decoder, simplified data structures
 2011-07-14: can parse macaon lattices in fr/en; can output a factorized tree (not a graph)
 2011-07-13: factorize output using a subtree representation as hash keys
 2011-07-12: lazy loading of the model (ModelOnDisk) 
 2011-07-08: level of functionnaly: can parse a lattice and output all parses
             need to come up with a storage methodology for the output
-java -cp liblinear-1.7-with-deps.jar:trove.jar:. LatticeParser lattices/john-eats-potatoes.txt
-(cut -f3 -d" " lattices/john-eats-potatoes.log;cut -f4 -d" " lattices/john-eats-potatoes.log)|grep .|sort -u|cat -n| awk '{print $2"\t"$1}' > lattices/john-eats-potatoes.lex
 
-ideas:
-* separate stack and trees to enable more factorization during parsing
-* labeled predictions
+Usage
+=====
+
+  train: java LatticeParser --train projective-trees-conll05 model
+  predict: java LatticeParser model < input
+  evaluate: java LatticeParser --eval model test-trees-conll05
+
+To train a model, you need to provide a projective dependency treebank
+(non-projective trees can be projectivized with the malt parser).
+Training requires a lot of memory and a fair amount of time, depending
+on the size of the treebank. The parser uses liblinear to train
+a model that predicts parsing labeled shift-reduce transitions. The
+model is saved in a fast-loading binary format documented in FORMAT.
+
+For parsing lattices, you need a model trained with your parser and
+a lattice representation of your input. See Lattice file format for
+details. The output is a hypergraph representation of the input
+which includes arc ids to refer to the input. Arc ids are computed
+by topological sort.
+
+
+How does it work?
+=================
+
+See doc.pdf (that you can generate with "pdflatex doc.tex")
+
+
+Ideas
+=====
+
 * model on-disk format => compressed version
 * c implementation
 * incremental features
-* more factorization with hypergraphs
 * implement in malt
 
 paper:
@@ -26,14 +65,34 @@ paper:
 * subtrees: explicitly deduplicate tree during parse (because we have all subtrees): use input/chilren/label as hash key
   incremental: a given tree is already deduplicated
 * same for common ancester tree
+* tree automata litterature
 
-file format:
-list of arcs
-0 1 id word tag label score vector
-1 2 child1 (order of children?) use topological order
-1 3 child2
-1 4 child3
-(for now, input: start end word tag; output: start end state:word:tag)
+
+Lattice file format (input)
+===========================
+
+The file format is defined as a list of arcs, plus optional (ignored) end states.
+
+  <from-state> <to-state> word tag
+  <end-state>
+
+
+Hypergraph file format (output)
+===============================
+
+Same as input format with additional -OR- label for alternation nodes in the hypergraph.
+
+  <from-state> <to-state> id:word:tag label
+  <from-state> <to-state> -OR-
+  <end-state>
+
+
+Notes
+=====
+
+WARNING: liblinear fills the scores[] table with a different order than the label order. (file a bug report)
+
+How do we include scores?
 
 how many arcs?
 how many states
@@ -42,13 +101,17 @@ can we process efficiently the resulting trees?
 => pruning paths
 => all parses through a word path; all words through a parse
 
-Projectivize FTB using malt:
+
+Projectivize FTB using malt
+===========================
+
 java -jar malt-1.5.2/malt.jar -c pproj -m proj -i data/ftb6.train.conll05 -o data/ftb6.train.conll05.projective -pp head
 java -jar malt-1.5.2/malt.jar -c pproj -m proj -i data/ftb6.dev.conll05 -o data/ftb6.dev.conll05.projective -pp head
 java -jar malt-1.5.2/malt.jar -c pproj -m proj -i data/ftb6.test.conll05 -o data/ftb6.test.conll05.projective -pp head
 
-java -jar lattice-parser.jar data/ftb6.train.conll05.projective ftb.model
-echo "Jean regarde l'homme qui mange une glace avec des jumelles." | txt2macaon | maca_segmenter | maca_tokenizer | maca_lexer | maca_tagger | macaon2htk -p | perl htk2fsm.perl | java -jar lattice-parser.jar ftb.model.binary | python2 fsm_draw.py
-echo "Jean likes to eat potatoes." | /data/demo-macaon/translation/maca_translate --text --model en-fr --prune 20 | maca_lexer -t -n -1 | maca_tagger -n 20 | macaon2htk -p | perl htk2fsm.perl | java -jar lattice-parser.jar ftb.model.binary | python2 fsm_draw.py
 
-hypergraph file format:
+Examples
+========
+
+echo "Jean regarde l'homme qui mange une glace avec des jumelles." | txt2macaon | maca_segmenter | maca_tokenizer | maca_lexer | maca_tagger | macaon2htk -p | perl htk2fsm.perl | java -jar lattice-parser.jar ftb.model.binary | python2 fsm_draw.py
+echo "Jean likes to eat potatoes." | /data/demo-macaon/translation/maca_translate --text --model en-fr --prune 20 | maca_lexer -t -n -1 | maca_tagger -n 20 | macaon2htk -p | perl htk2fsm.perl | java -jar lattice-parser.jar ftb.model.binary | python view-hypergraph.py

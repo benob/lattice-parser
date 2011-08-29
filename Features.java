@@ -136,30 +136,30 @@ class Features {
         if(context.input[2] != null) { q2w = context.input[2].word; q2t = context.input[2].tag; }
         // TODO: dependency-label-based features
         if(context.stack != null) {
-            s0w = context.stack.tree.input.word;
-            s0t = context.stack.tree.input.tag;
-            if(context.stack.tree.children != null) {
-                ChildNode leftMostChild = context.stack.tree.leftMostChild();
+            s0w = context.stack.input.word;
+            s0t = context.stack.input.tag;
+            if(context.stack.children != null) {
+                ChildNode leftMostChild = context.stack.leftMostChild();
                 s0lc = leftMostChild.node.input.tag;
                 s0lcl = leftMostChild.label;
-                ChildNode rightMostChild = context.stack.tree.rightMostChild();
+                ChildNode rightMostChild = context.stack.rightMostChild();
                 s0rc = rightMostChild.node.input.tag;
                 s0rcl = rightMostChild.label;
             }
             if(context.stack.next != null) {
-                s1w = context.stack.next.tree.input.word;
-                s1t = context.stack.next.tree.input.tag;
-                if(context.stack.next.tree.children != null) {
-                    ChildNode leftMostChild = context.stack.next.tree.leftMostChild();
+                s1w = context.stack.next.input.word;
+                s1t = context.stack.next.input.tag;
+                if(context.stack.next.children != null) {
+                    ChildNode leftMostChild = context.stack.next.leftMostChild();
                     s1lc = leftMostChild.node.input.tag;
                     s1lcl = leftMostChild.label;
-                    ChildNode rightMostChild = context.stack.next.tree.rightMostChild();
+                    ChildNode rightMostChild = context.stack.next.rightMostChild();
                     s1rc = rightMostChild.node.input.tag;
                     s1rcl = rightMostChild.label;
                 }
                 if(context.stack.next.next != null) {
-                    s2w = context.stack.next.next.tree.input.word;
-                    s2t = context.stack.next.next.tree.input.tag;
+                    s2w = context.stack.next.next.input.word;
+                    s2t = context.stack.next.next.input.tag;
                 }
             }
         }

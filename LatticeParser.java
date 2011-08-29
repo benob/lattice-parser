@@ -92,34 +92,34 @@ class LatticeParser {
                     featureOutput.println();
                 }
                 if(action == -1) {
-                    output.add(context.stack.tree); // generated a complete tree
+                    output.add(context.stack); // generated a complete tree
                 } else if(action == SHIFT) {
                     //System.out.println("shift " + context.input[0].word);
                     TreeNode top = new TreeNode(context.input[0]);
                     context.input[0] = context.input[1];
                     context.input[1] = context.input[2];
-                    StackElement stack = new StackElement(context.stack, top);
+                    top.next = context.stack;
                     if(context.input[1] != null && context.input[1].next != null && context.input[1].next.outgoing.size() > 0) { // a bit tricky
                         for(InputArc arc: context.input[1].next.outgoing) {
                             context.input[2] = arc;
-                            newOpenParses.add(new ParseContext(stack, context.input.clone()));
+                            newOpenParses.add(new ParseContext(top, context.input.clone()));
                         }
                     } else {
                         context.input[2] = null;
-                        context.stack = stack;
+                        context.stack = top;
                         newOpenParses.add(context);
                     }
                 } else if((action - 1) % 2 + 1 == LEFT) {
                     //System.out.println("left " + context.stack.next.input.word + " <-(" + binaryModel.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
-                    TreeNode top = context.stack.next.tree.addChild(context.stack.tree, mapper.labels.get((action - 1) / 2));
-                    StackElement stack = new StackElement(context.stack.next.next, top);
-                    context.stack = stack;
+                    TreeNode top = context.stack.next.addChild(context.stack, mapper.labels.get((action - 1) / 2));
+                    top.next = context.stack.next.next;
+                    context.stack = top;
                     newOpenParses.add(context);
                 } else if((action - 1) % 2 + 1 == RIGHT) {
                     //System.out.println("right " + context.stack.next.input.word + " -> " + context.stack.input.word);
-                    TreeNode top = context.stack.tree.addChild(context.stack.next.tree, mapper.labels.get((action - 1) / 2));
-                    StackElement stack = new StackElement(context.stack.next.next, top);
-                    context.stack = stack;
+                    TreeNode top = context.stack.addChild(context.stack.next, mapper.labels.get((action - 1) / 2));
+                    top.next = context.stack.next.next;
+                    context.stack = top;
                     newOpenParses.add(context);
                 } else {
                     System.err.println("ERROR: unexpected action " + action);

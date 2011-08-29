@@ -8,6 +8,7 @@ class TreeNode implements Comparable<TreeNode> {
      public ChildNode children = null;
      public InputArc input = null;
      public String representation = null;
+     public TreeNode next; // next node in the stack
      int id = 0;
      int parentId = 0;
 
@@ -78,8 +79,10 @@ class TreeNode implements Comparable<TreeNode> {
 
      public void setParentId(int id) {
          parentId = id;
-         for(ChildNode child: children) {
-             child.node.setParentId(this.input.id);
+         if(children != null) {
+             for(ChildNode child: children) {
+                 child.node.setParentId(this.input.id);
+             }
          }
      }
 

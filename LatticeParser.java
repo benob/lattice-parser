@@ -228,7 +228,7 @@ class LatticeParser {
             }
             waitingList = newList;
         }
-        System.err.printf("arcs: %d, contexts: %d, stackelement: %d, treenodes: %d, paths: %d\n", InputArc.numInstances, ParseContext.numInstances, StackElement.numInstances, TreeNode.numInstances, forest.size());
+        System.err.printf("arcs: %d, contexts: %d, treenodes: %d, paths: %d\n", InputArc.numInstances, ParseContext.numInstances, TreeNode.numInstances, forest.size());
         InputArc.numInstances = 0;
         ParseContext.numInstances = 0;
         TreeNode.numInstances = 0;

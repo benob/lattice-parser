@@ -353,7 +353,9 @@ class LatticeParser {
             if("".equals(line)) {
                 nodes.firstElement().number(1);
                 Vector<TreeNode> forest = latticePredict(nodes.firstElement(), null, null);
-                outputForest(forest, System.out);
+                //outputForest(forest, System.out);
+                HypergraphOutput output = new HypergraphOutput();
+                output.writeHypergraph(forest, System.out);
                 System.out.println();
                 nodes.clear();
             } else {
@@ -371,7 +373,9 @@ class LatticeParser {
         if(nodes.size() > 0) {
             nodes.firstElement().number(1);
             Vector<TreeNode> forest = latticePredict(nodes.firstElement(), null, null);
-            outputForest(forest, System.out);
+            //outputForest(forest, System.out);
+            HypergraphOutput output = new HypergraphOutput();
+            output.writeHypergraph(forest, System.out);
             System.out.println();
         }
     }

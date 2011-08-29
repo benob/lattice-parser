@@ -24,6 +24,23 @@ class Node implements Comparable<Node> {
         lemma = peer.lemma;
         children = new Vector<Node>();
     }
+    public Node() {
+        children = new Vector<Node>();
+    }
+    boolean isOrNode;
+    public Node(TreeNode node, String label) { // create non-shared structure from treenode
+        isOrNode = false;
+        id = node.input.id;
+        word = node.input.word;
+        tag = node.input.tag;
+        this.label = label;
+        children = new Vector<Node>();
+        if(node.children != null) {
+            for(ChildNode child: node.children) {
+                children.add(new Node(child.node, child.label));
+            }
+        }
+    }
     /*public Node clone() {
         Node node = new Node(this);
         node.children = children.clone();
@@ -76,6 +93,35 @@ class Node implements Comparable<Node> {
             }
         }
     }
+    public String factorRepresentation() {
+        StringBuffer output = new StringBuffer("");
+        for(Node child: children) {
+            output.append(child.subTreeRepresentation());
+        }
+        return output.toString();
+    }
+
+    public String subTreeRepresentation() {
+        StringBuffer output = new StringBuffer("(");
+        output.append(label).append(":").append(id);
+        for(Node child: children) {
+            output.append(child.subTreeRepresentation());
+        }
+        output.append(")");
+        return output.toString();
+    }
+
+    public String toSexp() {
+        StringBuffer output = new StringBuffer("(");
+        output.append(label).append(":").append(id).append(":").append(word);
+        for(Node child: children) {
+            output.append(" ");
+            output.append(child.toSexp());
+        }
+        output.append(")");
+        return output.toString();
+    }
+
     public void setParent(Node parent) {
         if(this.parent != null) {
             this.parent.removeChild(this);

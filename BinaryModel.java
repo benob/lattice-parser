@@ -1,6 +1,6 @@
 /*This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
-the Free Software Foundation; version 2 of the License.
+the Free Software Foundation; version 3 of the License.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -18,14 +18,14 @@ import gnu.trove.*;
 
 class BinaryModel {
     // only works for correct model files, and dense labels!
-    static int MAGIC = 0xa7dcb043;
-    static int VERSION = 0;
-    static int LABEL_SECTION = 0;
-    static int WEIGHT_SECTION = 1;
-    static int TABLE_SECTION = 2;
-    static int WEIGHT_TYPE_DOUBLE = 0;
-    static int LABEL_TYPE_INT = 0;
-    static int WEIGHT_ENCODING_SPARSE = 0;
+    static final int MAGIC = 0xa7dcb043;
+    static final int VERSION = 1;
+    static final int LABEL_SECTION = 0;
+    static final int WEIGHT_SECTION = 1;
+    static final int TABLE_SECTION = 2;
+    static final int WEIGHT_TYPE_DOUBLE = 0;
+    static final int LABEL_TYPE_INT = 0;
+    static final int WEIGHT_ENCODING_SPARSE = 0;
 
     static public void convert(String featureMapper, String libLinearModel, String outputFile) throws IOException {
         Features features = new Features();
@@ -117,33 +117,48 @@ class BinaryModel {
         output.writeInt(TABLE_SECTION);
         output.writeInt(-1); // last section
 
-        numFeatures = weightLocation.size();
-        int lookupSize = numFeatures * 3;
-        int startOfKeys = 4 * (lookupSize + 5); // section-type, next-section (x2) + num-features + lookup-size + 4 * lookup-size
-        output.writeInt(numFeatures);
-        output.writeInt(numClasses);
-        output.writeInt(lookupSize);
-        output.writeInt(startOfKeys);
+        if(VERSION == 0) {
+            numFeatures = weightLocation.size();
+            int lookupSize = numFeatures * 3;
+            int startOfKeys = 4 * (lookupSize + 5); // section-type, next-section (x2) + num-features + lookup-size + 4 * lookup-size
+            output.writeInt(numFeatures);
+            output.writeInt(numClasses);
+            output.writeInt(lookupSize);
+            output.writeInt(startOfKeys);
 
-        int lookupStart = (int) output.getFilePointer();
-        for(int i = 0; i < lookupSize; i++) output.writeInt(0); // placeholder for hash table
+            int lookupStart = (int) output.getFilePointer();
+            for(int i = 0; i < lookupSize; i++) output.writeInt(0); // placeholder for hash table
 
-        int locations[] = new int[lookupSize];
-        Arrays.fill(locations, 0);
-        iterator = weightLocation.iterator();
-        for (int i = 0; i < numFeatures; i++) {
-            iterator.advance();
-            String featureText = iterator.key();
-            int location = iterator.value();
-            int hash = Math.abs(featureText.hashCode());
-            while(locations[hash % lookupSize] != 0) hash++;
-            locations[hash % lookupSize] = (int) output.getFilePointer();
-            output.writeUTF(featureText);
-            output.writeInt(location);
-        }
-        output.seek(lookupStart);
-        for(int i = 0; i < lookupSize; i++) {
-            output.writeInt(locations[i]);
+            int locations[] = new int[lookupSize];
+            Arrays.fill(locations, 0);
+            iterator = weightLocation.iterator();
+            for (int i = 0; i < numFeatures; i++) {
+                iterator.advance();
+                String featureText = iterator.key();
+                int location = iterator.value();
+                int hash = Math.abs(featureText.hashCode());
+                while(locations[hash % lookupSize] != 0) hash++;
+                locations[hash % lookupSize] = (int) output.getFilePointer();
+                output.writeUTF(featureText);
+                output.writeInt(location);
+            }
+            output.seek(lookupStart);
+            for(int i = 0; i < lookupSize; i++) {
+                output.writeInt(locations[i]);
+            }
+        } else if(VERSION == 1) {
+            numFeatures = weightLocation.size();
+            output.writeInt(numFeatures);
+            output.writeInt(numClasses);
+            Trie trie = new Trie();
+            iterator = weightLocation.iterator();
+            for(int i = 0; i < numFeatures; i++) {
+                iterator.advance();
+                trie.insert(iterator.key(), iterator.value());
+            }
+            trie.writeToDisk(output);
+        } else {
+            System.err.println("ERROR: unsupported version " + VERSION);
         }
 
         output.seek(labelSectionLocation + 4);
@@ -164,6 +179,7 @@ class BinaryModel {
     int tableSectionLocation = -1;
     MappedByteBuffer model;
     Charset utf8 = Charset.forName("utf-8");
+    public int modelVersion = 0;
 
     void loadModel(String filename) throws IOException {
         File file = new File(filename);
@@ -173,9 +189,9 @@ class BinaryModel {
             System.err.printf("error: bad magic 0x%x != 0x%x\n", magic, MAGIC);
             throw new IOException();
         }
-        int version = model.getInt(4);
-        if(version != VERSION) {
-            System.err.printf("error: unsupported version %d != %d\n", version, VERSION);
+        modelVersion = model.getInt(4);
+        if(modelVersion < 0 || modelVersion > 1) {
+            System.err.printf("error: unsupported version %d\n", modelVersion);
             throw new IOException();
         }
         int numSections = model.getInt(8);
@@ -219,7 +235,7 @@ class BinaryModel {
             labels.add(new String(buffer, utf8));
             pointer += length + 2;
         }
-        lookupSize = model.getInt(tableSectionLocation + 16);
+        if(modelVersion == 0) lookupSize = model.getInt(tableSectionLocation + 16);
         cache = new String[100000];
         weightCache = new double[100000][numClasses];
         //System.err.printf("classes: %d, features: %d, lookup: %d, length:%d, ndeps:%d\n", numClasses, numFeatures, lookupSize, file.length(), labels.size());
@@ -228,7 +244,7 @@ class BinaryModel {
     String cache[];
     double weightCache[][];
 
-    public void getWeights(String feature, double[] weights) throws IOException {
+    public void getWeightsHashTable(String feature, double[] weights) throws IOException {
         Arrays.fill(weights, 0);
         int hash = Math.abs(feature.hashCode());
         int cacheCode = hash % cache.length;
@@ -267,11 +283,66 @@ class BinaryModel {
             }
         } 
     }
+
+    public boolean findInTrie(byte[] key, int index, double[] weights, int nodeLocation) {
+        int matchLength = model.get(nodeLocation + 4);
+        byte match[] = new byte[matchLength];
+        for(int i = 0; i < matchLength; i++) {
+            match[i] = model.get(nodeLocation + 5 + i);
+        }
+        int where = 0;
+        while(where < match.length && where + index < key.length && match[where] == key[where + index]) {
+            where++;
+        }
+        //System.out.println("" + new String(key) + " [" + new String(match) + "]");
+        if(where == match.length) {
+            if(where + index == key.length) {
+                int weightLocation = model.getInt(nodeLocation);
+                //System.out.println("weight=" + weightLocation);
+                if(weightLocation != -1) {
+                    int numWeights = model.getInt(weightLocation);
+                    for(int i = 0; i < numWeights; i++) {
+                        int id = model.getInt(weightLocation + 4 + i * 12);
+                        weights[id] = model.getDouble(weightLocation + 4 + i * 12 + 4);
+                    }
+                    //System.out.printf("%s %d : %f %f %f\n", feature, weightId, weights[0], weights[1], weights[2]);
+                }
+                return true;
+            }
+            int numChildren = model.get(nodeLocation + 5 + matchLength);
+            //System.out.println("num-children=" + numChildren);
+            for(int i = 0; i < numChildren; i++) {
+                int childLocation = model.getInt(nodeLocation + 6 + matchLength + i * 4);
+                //System.out.println("child=" + childLocation);
+                if(findInTrie(key, index + where, weights, childLocation)) return true;
+            }
+        }
+        return false;
+    }
+
+    public void getWeightsTrie(String feature, double[] weights) throws IOException, UnsupportedEncodingException {
+        Arrays.fill(weights, 0);
+        int hash = Math.abs(feature.hashCode());
+        int cacheCode = hash % cache.length;
+        if(feature.equals(cache[cacheCode])) {
+            //for(int i = 0; i < numClasses; i++) weights[i] = weightCache[cacheCode][i];
+            System.arraycopy(weightCache[cacheCode], 0, weights, 0, numClasses);
+        }
+        int rootLocation = tableSectionLocation + 16; // root node
+        byte key[] = feature.getBytes("UTF-8");
+        findInTrie(key, 0, weights, rootLocation);
+        for(int id = 0; id < weights.length; id++) {
+            weightCache[cacheCode][id] = weights[id];
+        }
+        cache[cacheCode] = feature;
+    }
+
     public void predict(Vector<String> features, double[] scores) throws IOException {
         double weights[] = new double[numClasses];
         Arrays.fill(scores, 0);
         for(String feature: features) {
-            getWeights(feature, weights);
+            if(modelVersion == 0) getWeightsHashTable(feature, weights);
+            else if(modelVersion == 1) getWeightsTrie(feature, weights);
             for(int i = 0; i < numClasses; i++) {
                 scores[i] += weights[i];
             }
@@ -296,7 +367,8 @@ class BinaryModel {
                         String tokens[] = line.trim().split(" ");
                         if(tokens.length != 2) continue;
                         double scores[] = new double[model.numClasses];
-                        model.getWeights(tokens[0], scores);
+                        if(model.modelVersion == 0) model.getWeightsHashTable(tokens[0], scores);
+                        else if(model.modelVersion == 1) model.getWeightsTrie(tokens[0], scores);
                         //model.getWeights("__notfound__" + tokens[0], scores);
                         System.out.print(tokens[0]);
                         for(int i = 0; i < scores.length; i++) {

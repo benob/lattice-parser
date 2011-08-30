@@ -3,14 +3,13 @@ Benoit Favre <benoit.favre@lif.univ-mrs.fr> 2011-07-19
 
 This file describes the binary format
 
+Version 0
+=========
+
 0 [magic:int=0xa7dcb043]
 4 [version:int] // = 0
 8 [num-sections:int]
-12 [section]
-[section]
-[section]
-[section]
-...
+12 ([section]) * num-sections
 
 section-header:
 0 [section-id:int]
@@ -38,4 +37,21 @@ note: hash code computation (from java 1.5 documentation)
 Returns a hash code for this string. The hash code for a String object is computed as
  s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]
   using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)
+
+Version 1
+=========
+
+This version replaces the hashtable by a Patricia Trie, only the corresponding section is modified.
+
+feature id mapping section (id=2):
+8 [num-features:int]
+12 [num-classes:int]
+16 [trie-root:node]
+
+node:
+0 [weight-location:int]
+4 [size-of-key:byte]
+5 [key-text:utf8-bytes]
+5 + n [num-children:byte]
+6 + n ([child-location:int]) * num-children
 

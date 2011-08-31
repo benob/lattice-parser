@@ -1,13 +1,13 @@
 Simple binary format for hash-table -> vector of weights model.
 Benoit Favre <benoit.favre@lif.univ-mrs.fr> 2011-07-19
 
-This file describes the binary format
+This file describes the binary format. All binary numbers are written to disk using java standards.
 
-Version 0
+Version 2
 =========
 
-0 [magic:int=0xa7dcb043]
-4 [version:int] // = 0
+0 [magic:int] // = 0xa7dcb043
+4 [version:int] // = 2
 8 [num-sections:int]
 12 ([section]) * num-sections
 
@@ -15,22 +15,31 @@ section-header:
 0 [section-id:int]
 4 [next-section:int] // next section location
 
-label section (id=0): // warning: there don't need to be the same number of labels as the number of classes
-8 [num-labels:int]
-12 ([label-length:short], [label-text:utf8-bytes]) * num-labels // java standard encoding for writeUTF()
+label section (id=0): // warning: this section encodes dependency labels, not classes predicted by the classifier
+8 [label-encoding:int] // 0 = list of utf-8 encoded strings
+12 [num-labels:int]
+16 ([label-length:short], [label-text:utf8-bytes]) * num-labels // java standard encoding for writeUTF()
 
 weight section (id=1):
-8 [label-type:int] // 0 = int
-12 [weight-type:int] // 0 = float
+8 [label-type:int] // 0 = int, 1 = short, 2 = byte
+12 [weight-type:int] // 0 = double, 1 = float
 16 [encoding:int] // 0 = sparse
-20 ([num-weight-pairs:int], ([label-id:int], [weight:weight-type]) +) * num-features // sparse encoding of weights
+20 ([sparse-weight]) * num-weights
 
-feature id hash table section (id=2):
+sparse-weight:
+0 [num-weight-pairs:label-type] // at most one weight / label
+([label-id:label-type], [weight:weight-type]) * num-non-null-weights // sparse encoding of weights
+
+feature id mapping section (id=2):
 8 [num-features:int]
 12 [num-classes:int]
-16 [hash-table-size:int] // recommanded size > 2 * num-features
-20 [keys-start:int]
-24 ([key-offset:int]) * hash-table-size // 0 indicates empty slot, key-offset is absolute
+16 [feature-mapping-type:int] // 0 = hash-table, 1 = trie
+20 [hash-table|trie]
+
+hash-table:
+20 [hash-table-size:int] // recommanded size > 2 * num-features
+24 [keys-start:int]
+28 ([key-offset:int]) * hash-table-size // 0 indicates empty slot, key-offset is absolute
 ([key-length:short], [key-text:utf8-bytes], [weight-location:int]) * num-features // weight-location is relative to weight section
 
 note: hash code computation (from java 1.5 documentation)
@@ -38,19 +47,12 @@ Returns a hash code for this string. The hash code for a String object is comput
  s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]
   using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)
 
-Version 1
-=========
-
-This version replaces the hashtable by a Patricia Trie, only the corresponding section is modified.
-
-feature id mapping section (id=2):
-8 [num-features:int]
-12 [num-classes:int]
-16 [trie-root:node]
+trie:
+20 [trie-root:node]
 
 node:
-0 [weight-location:int]
-4 [size-of-key:byte]
+0 [weight-location:int] // -1 indicates non-leaf node
+4 [size-of-key:byte] // maximum key size is 256
 5 [key-text:utf8-bytes]
 5 + n [num-children:byte]
 6 + n ([child-location:int]) * num-children

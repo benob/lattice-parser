@@ -107,14 +107,7 @@ class Trie implements Comparable<Trie> {
     }
 
     public int writeToDisk(RandomAccessFile output) throws IOException {
-        return writeToDisk(output, new HashMap<String, Integer>());
-    }
-
-    public int writeToDisk(RandomAccessFile output, HashMap<String, Integer> alreadyOutput) throws IOException {
-        String repr = toString();
-        if(alreadyOutput.containsKey(repr)) return alreadyOutput.get(repr);
         int location = (int) output.getFilePointer();
-        alreadyOutput.put(repr, location);
         output.writeInt(payload);
         if(match != null) {
             output.writeByte(match.length);
@@ -130,7 +123,7 @@ class Trie implements Comparable<Trie> {
             output.writeInt(0); // reserve space
         }
         for(Trie child: children) {
-            childrenLocation.add(child.writeToDisk(output, alreadyOutput));
+            childrenLocation.add(child.writeToDisk(output));
         }
         long afterChildren = output.getFilePointer();
         output.seek(beforeChildren);

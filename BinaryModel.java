@@ -19,13 +19,26 @@ import gnu.trove.*;
 class BinaryModel {
     // only works for correct model files, and dense labels!
     static final int MAGIC = 0xa7dcb043;
-    static final int VERSION = 1;
+    static final int VERSION = 2;
     static final int LABEL_SECTION = 0;
     static final int WEIGHT_SECTION = 1;
-    static final int TABLE_SECTION = 2;
+    static final int MAPPING_SECTION = 2;
+
+    static final int LABEL_ENCODING = 0;
+
     static final int WEIGHT_TYPE_DOUBLE = 0;
+    static final int WEIGHT_TYPE_FLOAT = 1;
+    static final int WEIGHT_TYPE_INDEXED = 2; // not implemented
+
     static final int LABEL_TYPE_INT = 0;
+    static final int LABEL_TYPE_SHORT = 1;
+    static final int LABEL_TYPE_BYTE = 2;
+
     static final int WEIGHT_ENCODING_SPARSE = 0;
+    static final int WEIGHT_ENCODING_DENSE = 1; // not implemented
+
+    static final int MAPPING_TYPE_HASH = 0;
+    static final int MAPPING_TYPE_TRIE = 1;
 
     static public void convert(String featureMapper, String libLinearModel, String outputFile) throws IOException {
         Features features = new Features();
@@ -47,7 +60,7 @@ class BinaryModel {
                         weights[featureId][mapping[i]] = Double.parseDouble(tokens[i]);
                     }
                 } else {
-                    System.out.println("warning: too many weights");
+                    System.err.println("warning: too many weights");
                 }
                 featureId++;
             } else if(line.startsWith("nr_class ")) {
@@ -73,11 +86,12 @@ class BinaryModel {
         RandomAccessFile output = new RandomAccessFile(outputFile, "rw");
         output.writeInt(MAGIC);
         output.writeInt(VERSION);
-        output.writeInt(3); // num sections: labels, hash-table, weights
+        output.writeInt(3); // num sections: labels, mapping table, weights
 
         int labelSectionLocation = (int) output.getFilePointer();
         output.writeInt(LABEL_SECTION);
         output.writeInt(0); // placeholder for next section location
+        output.writeInt(LABEL_ENCODING); // simple list of strings
 
         output.writeInt(features.numLabels()); // warning: this is different from the number of classes
         for(int i = 0; i < features.numLabels(); i++) {
@@ -87,8 +101,12 @@ class BinaryModel {
         int weightSectionLocation = (int) output.getFilePointer();
         output.writeInt(WEIGHT_SECTION);
         output.writeInt(0);
-        output.writeInt(LABEL_TYPE_INT);
-        output.writeInt(WEIGHT_TYPE_DOUBLE);
+        int labelType = LABEL_TYPE_INT;
+        int weightType = WEIGHT_TYPE_FLOAT;
+        if(numClasses < 128) labelType = LABEL_TYPE_BYTE;
+        else if(numClasses < 32768) labelType = LABEL_TYPE_SHORT;
+        output.writeInt(labelType);
+        output.writeInt(weightType);
         output.writeInt(WEIGHT_ENCODING_SPARSE);
 
         TObjectIntHashMap<String> weightLocation = new TObjectIntHashMap<String>();
@@ -103,26 +121,33 @@ class BinaryModel {
             }
             if(numNonNull > 0) {
                 weightLocation.put(featureText, (int) output.getFilePointer());
-                output.writeInt(numNonNull);
+                if(labelType == LABEL_TYPE_BYTE) output.writeByte(numNonNull);
+                else if(labelType == LABEL_TYPE_SHORT) output.writeShort(numNonNull);
+                else output.writeInt(numNonNull);
                 for(int j = 0; j < numClasses; j++) {
                     if(Math.abs(weights[id][j]) > 1e-6) {
-                        output.writeInt(j);
-                        output.writeDouble(weights[id][j]);
+                        if(labelType == LABEL_TYPE_BYTE) output.writeByte(j);
+                        else if(labelType == LABEL_TYPE_SHORT) output.writeShort(j);
+                        else if(labelType == LABEL_TYPE_INT) output.writeInt(j);
+                        if(weightType == WEIGHT_TYPE_FLOAT) output.writeFloat((float) weights[id][j]);
+                        else if(weightType == WEIGHT_TYPE_DOUBLE) output.writeDouble(weights[id][j]);
                     }
                 }
             }
         }
 
         int tableSectionLocation = (int) output.getFilePointer();
-        output.writeInt(TABLE_SECTION);
+        output.writeInt(MAPPING_SECTION);
         output.writeInt(-1); // last section
 
-        if(VERSION == 0) {
-            numFeatures = weightLocation.size();
+        int mappingType = MAPPING_TYPE_TRIE;
+        numFeatures = weightLocation.size();
+        output.writeInt(numFeatures);
+        output.writeInt(numClasses);
+        output.writeInt(mappingType);
+        if(mappingType == MAPPING_TYPE_HASH) {
             int lookupSize = numFeatures * 3;
             int startOfKeys = 4 * (lookupSize + 5); // section-type, next-section (x2) + num-features + lookup-size + 4 * lookup-size
-            output.writeInt(numFeatures);
-            output.writeInt(numClasses);
             output.writeInt(lookupSize);
             output.writeInt(startOfKeys);
 
@@ -146,10 +171,7 @@ class BinaryModel {
             for(int i = 0; i < lookupSize; i++) {
                 output.writeInt(locations[i]);
             }
-        } else if(VERSION == 1) {
-            numFeatures = weightLocation.size();
-            output.writeInt(numFeatures);
-            output.writeInt(numClasses);
+        } else if(mappingType == MAPPING_TYPE_TRIE) {
             Trie trie = new Trie();
             iterator = weightLocation.iterator();
             for(int i = 0; i < numFeatures; i++) {
@@ -158,7 +180,7 @@ class BinaryModel {
             }
             trie.writeToDisk(output);
         } else {
-            System.err.println("ERROR: unsupported version " + VERSION);
+            System.err.println("ERROR: unsupported mapping " + mappingType);
         }
 
         output.seek(labelSectionLocation + 4);
@@ -180,6 +202,12 @@ class BinaryModel {
     MappedByteBuffer model;
     Charset utf8 = Charset.forName("utf-8");
     public int modelVersion = 0;
+    int labelType;
+    int labelSize[] = new int[]{4,2,1};
+    int weightType;
+    int weightSize[] = new int[]{8,4};
+    int mappingType;
+    int weightEncoding;
 
     void loadModel(String filename) throws IOException {
         File file = new File(filename);
@@ -190,7 +218,7 @@ class BinaryModel {
             throw new IOException();
         }
         modelVersion = model.getInt(4);
-        if(modelVersion < 0 || modelVersion > 1) {
+        if(modelVersion != 2) {
             System.err.printf("error: unsupported version %d\n", modelVersion);
             throw new IOException();
         }
@@ -200,32 +228,21 @@ class BinaryModel {
             int sectionType = model.getInt(pointer);
             if(sectionType == LABEL_SECTION) labelSectionLocation = pointer;
             else if(sectionType == WEIGHT_SECTION) weightSectionLocation = pointer;
-            else if(sectionType == TABLE_SECTION) tableSectionLocation = pointer;
+            else if(sectionType == MAPPING_SECTION) tableSectionLocation = pointer;
             pointer = model.getInt(pointer + 4);
         }
 
-        numLabels = model.getInt(labelSectionLocation + 8);
+        numLabels = model.getInt(labelSectionLocation + 12);
         numFeatures = model.getInt(tableSectionLocation + 8);
         numClasses = model.getInt(tableSectionLocation + 12);
 
-        int labelType = model.getInt(weightSectionLocation + 8);
-        if(labelType != LABEL_TYPE_INT) {
-            System.err.printf("error: unsupported label type %d != %d\n", labelType, LABEL_TYPE_INT);
-            throw new IOException();
-        }
-        int weightType = model.getInt(weightSectionLocation + 12);
-        if(weightType != WEIGHT_TYPE_DOUBLE) {
-            System.err.printf("error: unsupported weight type %d != %d\n", weightType, WEIGHT_TYPE_DOUBLE);
-            throw new IOException();
-        }
-        int encoding = model.getInt(weightSectionLocation + 16);
-        if(encoding != WEIGHT_ENCODING_SPARSE) {
-            System.err.printf("error: unsupported weight vector encoding %d != %d\n", encoding, WEIGHT_ENCODING_SPARSE);
-            throw new IOException();
-        }
+        labelType = model.getInt(weightSectionLocation + 8);
+        weightType = model.getInt(weightSectionLocation + 12);
+        weightEncoding = model.getInt(weightSectionLocation + 16);
+        mappingType = model.getInt(tableSectionLocation + 16);
 
         labels = new Vector<String>();
-        pointer = labelSectionLocation + 12;
+        pointer = labelSectionLocation + 16;
         while(labels.size() < numLabels) {
             short length = model.getShort(pointer);
             byte buffer[] = new byte[length];
@@ -235,7 +252,7 @@ class BinaryModel {
             labels.add(new String(buffer, utf8));
             pointer += length + 2;
         }
-        if(modelVersion == 0) lookupSize = model.getInt(tableSectionLocation + 16);
+        if(mappingType == MAPPING_TYPE_HASH) lookupSize = model.getInt(tableSectionLocation + 20);
         cache = new String[100000];
         weightCache = new double[100000][numClasses];
         //System.err.printf("classes: %d, features: %d, lookup: %d, length:%d, ndeps:%d\n", numClasses, numFeatures, lookupSize, file.length(), labels.size());
@@ -244,8 +261,24 @@ class BinaryModel {
     String cache[];
     double weightCache[][];
 
+    void readWeightVector(int weightLocation, double[] weights) {
+        int numWeights = 0;
+        if(labelType == LABEL_TYPE_BYTE) numWeights = model.get(weightLocation);
+        else if(labelType == LABEL_TYPE_SHORT) numWeights = model.getShort(weightLocation);
+        else if(labelType == LABEL_TYPE_INT) numWeights = model.getInt(weightLocation);
+        //System.out.println("num-weights: " + numWeights + " / " + labelType + " " + weightType);
+        for(int i = 0; i < numWeights; i++) {
+            int id = 0;
+            if(labelType == LABEL_TYPE_BYTE) id = model.get(weightLocation + labelSize[labelType] + i * (labelSize[labelType] + weightSize[weightType]));
+            else if(labelType == LABEL_TYPE_SHORT) id =model.getShort(weightLocation + labelSize[labelType] + i * (labelSize[labelType] + weightSize[weightType]));
+            else if(labelType == LABEL_TYPE_INT) id =model.getInt(weightLocation + labelSize[labelType] + i * (labelSize[labelType] + weightSize[weightType]));
+            //System.out.println("id: " + id);
+            if(weightType == WEIGHT_TYPE_FLOAT) weights[id] = model.getFloat(weightLocation + labelSize[labelType] + i * (labelSize[labelType] + weightSize[weightType]) + labelSize[labelType]);
+            else if(weightType == WEIGHT_TYPE_DOUBLE) weights[id] = model.getDouble(weightLocation + labelSize[labelType] + i * (labelSize[labelType] + weightSize[weightType]) + labelSize[labelType]);
+        }
+    }
+
     public void getWeightsHashTable(String feature, double[] weights) throws IOException {
-        Arrays.fill(weights, 0);
         int hash = Math.abs(feature.hashCode());
         int cacheCode = hash % cache.length;
         if(feature.equals(cache[cacheCode])) {
@@ -253,12 +286,13 @@ class BinaryModel {
             System.arraycopy(weightCache[cacheCode], 0, weights, 0, numClasses);
         }
         for(;; hash++) {
-            int where = tableSectionLocation + 24 + 4 * (hash % lookupSize);
+            int where = tableSectionLocation + 28 + 4 * (hash % lookupSize);
             //System.out.println(feature + " " + where);
             int keyLocation = model.getInt(where);
             //System.out.println(keyLocation);
             if(keyLocation == 0) { // not found
-                return;
+                Arrays.fill(weights, 0);
+                break;
             }
             int length = model.getShort(keyLocation);
             //System.out.println(length);
@@ -272,19 +306,19 @@ class BinaryModel {
             //System.out.println(key);
             if(key.equals(feature)) {
                 int weightLocation = model.getInt(keyLocation + 2 + length);
-                int numWeights = model.getInt(weightLocation);
-                for(int i = 0; i < numWeights; i++) {
-                    int id = model.getInt(weightLocation + 4 + i * 12);
-                    weights[id] = model.getDouble(weightLocation + 4 + i * 12 + 4);
-                    weightCache[cacheCode][id] = weights[id];
+                if(weightLocation != -1) {
+                    readWeightVector(weightLocation, weights);
+                } else { // should not happend
+                    Arrays.fill(weights, 0);
                 }
-                //System.out.printf("%s %d : %f %f %f\n", feature, weightId, weights[0], weights[1], weights[2]);
-                cache[cacheCode] = feature;
+                break;
             }
         } 
+        System.arraycopy(weights, 0, weightCache[cacheCode], 0, numClasses);
+        cache[cacheCode] = feature;
     }
 
-    public boolean findInTrie(byte[] key, int index, double[] weights, int nodeLocation) {
+    public int findInTrie(byte[] key, int index, int nodeLocation) {
         int matchLength = model.get(nodeLocation + 4);
         byte match[] = new byte[matchLength];
         for(int i = 0; i < matchLength; i++) {
@@ -294,46 +328,46 @@ class BinaryModel {
         while(where < match.length && where + index < key.length && match[where] == key[where + index]) {
             where++;
         }
-        //System.out.println("" + new String(key) + " [" + new String(match) + "]");
+        //System.out.println("" + new String(key).substring(index) + " [" + new String(match) + "] " + where);
         if(where == match.length) {
             if(where + index == key.length) {
                 int weightLocation = model.getInt(nodeLocation);
                 //System.out.println("weight=" + weightLocation);
                 if(weightLocation != -1) {
-                    int numWeights = model.getInt(weightLocation);
-                    for(int i = 0; i < numWeights; i++) {
-                        int id = model.getInt(weightLocation + 4 + i * 12);
-                        weights[id] = model.getDouble(weightLocation + 4 + i * 12 + 4);
-                    }
-                    //System.out.printf("%s %d : %f %f %f\n", feature, weightId, weights[0], weights[1], weights[2]);
+                    return weightLocation;
                 }
-                return true;
+                return -2;
             }
             int numChildren = model.get(nodeLocation + 5 + matchLength);
             //System.out.println("num-children=" + numChildren);
             for(int i = 0; i < numChildren; i++) {
                 int childLocation = model.getInt(nodeLocation + 6 + matchLength + i * 4);
-                //System.out.println("child=" + childLocation);
-                if(findInTrie(key, index + where, weights, childLocation)) return true;
+                //System.out.println(numChildren + " child=" + childLocation);
+                int result = findInTrie(key, index + where, childLocation);
+                if(result != -1) return result;
             }
+            //System.out.println("not-found");
         }
-        return false;
+        return -1;
     }
 
     public void getWeightsTrie(String feature, double[] weights) throws IOException, UnsupportedEncodingException {
-        Arrays.fill(weights, 0);
         int hash = Math.abs(feature.hashCode());
         int cacheCode = hash % cache.length;
         if(feature.equals(cache[cacheCode])) {
             //for(int i = 0; i < numClasses; i++) weights[i] = weightCache[cacheCode][i];
             System.arraycopy(weightCache[cacheCode], 0, weights, 0, numClasses);
+            return;
         }
-        int rootLocation = tableSectionLocation + 16; // root node
+        int rootLocation = tableSectionLocation + 20; // root node
         byte key[] = feature.getBytes("UTF-8");
-        findInTrie(key, 0, weights, rootLocation);
-        for(int id = 0; id < weights.length; id++) {
-            weightCache[cacheCode][id] = weights[id];
+        int weightLocation = findInTrie(key, 0, rootLocation);
+        if(weightLocation >= 0) {
+            readWeightVector(weightLocation, weights);
+        } else {
+            Arrays.fill(weights, 0);
         }
+        System.arraycopy(weights, 0, weightCache[cacheCode], 0, numClasses);
         cache[cacheCode] = feature;
     }
 
@@ -341,8 +375,8 @@ class BinaryModel {
         double weights[] = new double[numClasses];
         Arrays.fill(scores, 0);
         for(String feature: features) {
-            if(modelVersion == 0) getWeightsHashTable(feature, weights);
-            else if(modelVersion == 1) getWeightsTrie(feature, weights);
+            if(mappingType == MAPPING_TYPE_HASH) getWeightsHashTable(feature, weights);
+            else if(mappingType == MAPPING_TYPE_TRIE) getWeightsTrie(feature, weights);
             for(int i = 0; i < numClasses; i++) {
                 scores[i] += weights[i];
             }
@@ -359,16 +393,13 @@ class BinaryModel {
                 String line;
                 BufferedReader input = new BufferedReader(new InputStreamReader(System.in));
                 int num=1;
-                boolean inLabels = true;
+                Vector<String> features = new Vector<String>();
                 while(null != (line = input.readLine())) {
-                    if(line.trim().equals("")) {
-                        inLabels = false;
-                    } else if(!inLabels) {
                         String tokens[] = line.trim().split(" ");
-                        if(tokens.length != 2) continue;
+                        features.clear();
+                        features.add(tokens[0]);
                         double scores[] = new double[model.numClasses];
-                        if(model.modelVersion == 0) model.getWeightsHashTable(tokens[0], scores);
-                        else if(model.modelVersion == 1) model.getWeightsTrie(tokens[0], scores);
+                        model.predict(features, scores);
                         //model.getWeights("__notfound__" + tokens[0], scores);
                         System.out.print(tokens[0]);
                         for(int i = 0; i < scores.length; i++) {
@@ -376,7 +407,6 @@ class BinaryModel {
                         }
                         System.out.println();
                         num++;
-                    }
                 }
             } else {
                 StackTraceElement[] stack = Thread.currentThread ().getStackTrace ();

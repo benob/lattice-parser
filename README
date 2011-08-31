@@ -19,7 +19,7 @@ News
 2011-07-14: can parse macaon lattices in fr/en; can output a factorized tree (not a graph)
 2011-07-13: factorize output using a subtree representation as hash keys
 2011-07-12: lazy loading of the model (ModelOnDisk) 
-2011-07-08: level of functionnaly: can parse a lattice and output all parses
+2011-07-08: level of functionality: can parse a lattice and output all parses
             need to come up with a storage methodology for the output
 
 Usage
@@ -61,10 +61,10 @@ paper:
 * sparse representation?
 * minimal tree automaton?
 * what about arc eager parser?
-* subtrees: explicitly deduplicate tree during parse (because we have all subtrees): use input/chilren/label as hash key
-  incremental: a given tree is already deduplicated
-* same for common ancester tree
-* tree automata litterature
+* subtrees: explicitly factor tree during parse (because we have all subtrees): use input/chilren/label as hash key
+  incremental: a given tree is already factorized
+* same for common ancestor tree
+* tree automata literature
 
 
 Lattice file format (input)

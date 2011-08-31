@@ -37,7 +37,7 @@ feature id mapping section (id=2):
 20 [hash-table|trie]
 
 hash-table:
-20 [hash-table-size:int] // recommanded size > 2 * num-features
+20 [hash-table-size:int] // recommended size > 2 * num-features
 24 [keys-start:int]
 28 ([key-offset:int]) * hash-table-size // 0 indicates empty slot, key-offset is absolute
 ([key-length:short], [key-text:utf8-bytes], [weight-location:int]) * num-features // weight-location is relative to weight section

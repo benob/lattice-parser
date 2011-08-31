@@ -52,7 +52,6 @@ See doc.pdf (that you can generate with "pdflatex doc.tex")
 Ideas
 =====
 
-* model on-disk format => compressed version
 * c implementation
 * incremental features
 * implement in malt

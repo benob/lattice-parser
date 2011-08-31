@@ -343,12 +343,12 @@ class LatticeParser {
         problem.n = mapper.numFeatures();
         libLinearModel = Linear.train(problem, new Parameter(SolverType.MCSVM_CS, 1, 0.01));
         problem = null;
-        libLinearModel.save(new File(modelFileName));
+        libLinearModel.save(new File(modelFileName + ".txt"));
         libLinearModel = null;
         mapper.saveDict(modelFileName + ".features");
         mapper = null;
         System.out.println("creating binary model");
-        BinaryModel.convert(modelFileName + ".features", modelFileName, modelFileName + ".binary");
+        BinaryModel.convert(modelFileName + ".features", modelFileName + ".txt", modelFileName);
     }
 
     BinaryModel binaryModel = new BinaryModel();

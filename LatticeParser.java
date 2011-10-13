@@ -29,10 +29,11 @@ class LatticeParser {
     public int numExamples = 0;
 
     public Vector<TreeNode> latticePredict(InputNode inputStart, Vector<Integer> actions, PrintWriter featureOutput) throws IOException {
+        //System.err.println("parseit");
         if(actions == null) mapper.labels = binaryModel.labels;
         int currentAction = 0;
         Vector<TreeNode> output = new Vector<TreeNode>();
-        Vector<ParseContext> openParses = new Vector<ParseContext>();
+        LinkedList<ParseContext> openParses = new LinkedList<ParseContext>();
         // init openParses with start contexts (assumes at least one arc)
         InputArc arcTrigram[] = new InputArc[3];
         for(InputArc arc: inputStart.outgoing) {
@@ -59,83 +60,86 @@ class LatticeParser {
         double scores[] = new double[binaryModel.numClasses];
 
         while(openParses.size() > 0) {
-            Vector<ParseContext> newOpenParses = new Vector<ParseContext>();
-            for(ParseContext context: openParses) {
-                Vector<String> features = Features.getLatticeFeatures(context);
-                int action = -1;
-                if(actions != null) {
-                    if(currentAction >= actions.size()) {
-                        action = -1;
-                    } else {
-                        action = actions.get(currentAction);
-                        currentAction++;
-                        if(problem.l < problem.x.length) {
-                            if(action < 0) System.out.println("ERROR: action < 0");
-                            problem.x[problem.l] = mapper.mapForLibLinear(features);
-                            problem.y[problem.l] = action + 1;
-                            problem.l++;
-                        } else {
-                            System.err.println("ERROR: too many training transitions " + problem.l);
-                            return null;
-                        }
-                    }
+            //System.err.println("open: " + openParses.size());
+            ParseContext context = openParses.removeLast();
+            /*for(InputArc arc: context.input) {
+                if(arc != null) System.out.print(arc.word + "/" + arc.tag + " ");
+            }
+            System.out.println();*/
+            Vector<String> features = Features.getLatticeFeatures(context);
+            int action = -1;
+            if(actions != null) {
+                if(currentAction >= actions.size()) {
+                    action = -1;
                 } else {
-                    binaryModel.predict(features, scores);
-                    boolean available[] = new boolean[3];
-                    Arrays.fill(available, true);
-                    if(context.input[0] == null) available[SHIFT] = false;
-                    if(context.stack == null || context.stack.next == null) {
-                        available[LEFT] = false;
-                        available[RIGHT] = false;
-                    }
-                    for(int candidateAction = 0; candidateAction < binaryModel.numClasses; candidateAction ++) {
-                        if(available[(candidateAction - 1) % 2 + 1] && (action == -1 || scores[action] < scores[candidateAction])) 
-                            action = candidateAction;
+                    action = actions.get(currentAction);
+                    currentAction++;
+                    if(problem.l < problem.x.length) {
+                        if(action < 0) System.out.println("ERROR: action < 0");
+                        problem.x[problem.l] = mapper.mapForLibLinear(features);
+                        problem.y[problem.l] = action + 1;
+                        problem.l++;
+                    } else {
+                        System.err.println("ERROR: too many training transitions " + problem.l);
+                        return null;
                     }
                 }
-                if(featureOutput != null && action >= 0) {
-                    FeatureNode featuresNodes[] = mapper.mapForLibLinear(features);
-                    featureOutput.print(action + 1);
-                    for(int i = 0; i < featuresNodes.length; i++) {
-                        featureOutput.printf(" %d:1", featuresNodes[i].index);
-                    }
-                    featureOutput.println();
+            } else {
+                binaryModel.predict(features, scores);
+                boolean available[] = new boolean[3];
+                Arrays.fill(available, true);
+                if(context.input[0] == null) available[SHIFT] = false;
+                if(context.stack == null || context.stack.next == null) {
+                    available[LEFT] = false;
+                    available[RIGHT] = false;
                 }
-                if(action == -1) {
-                    output.add(context.stack); // generated a complete tree
-                } else if(action == SHIFT) {
-                    //System.out.println("shift " + context.input[0].word);
-                    TreeNode top = new TreeNode(context.input[0]);
-                    context.input[0] = context.input[1];
-                    context.input[1] = context.input[2];
-                    top.next = context.stack;
-                    if(context.input[1] != null && context.input[1].next != null && context.input[1].next.outgoing.size() > 0) { // a bit tricky
-                        for(InputArc arc: context.input[1].next.outgoing) {
-                            context.input[2] = arc;
-                            newOpenParses.add(new ParseContext(top, context.input.clone()));
-                        }
-                    } else {
-                        context.input[2] = null;
-                        context.stack = top;
-                        newOpenParses.add(context);
-                    }
-                } else if((action - 1) % 2 + 1 == LEFT) {
-                    //System.out.println("left " + context.stack.next.input.word + " <-(" + binaryModel.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
-                    TreeNode top = context.stack.next.addChild(context.stack, mapper.labels.get((action - 1) / 2));
-                    top.next = context.stack.next.next;
-                    context.stack = top;
-                    newOpenParses.add(context);
-                } else if((action - 1) % 2 + 1 == RIGHT) {
-                    //System.out.println("right " + context.stack.next.input.word + " -> " + context.stack.input.word);
-                    TreeNode top = context.stack.addChild(context.stack.next, mapper.labels.get((action - 1) / 2));
-                    top.next = context.stack.next.next;
-                    context.stack = top;
-                    newOpenParses.add(context);
-                } else {
-                    System.err.println("ERROR: unexpected action " + action);
+                for(int candidateAction = 0; candidateAction < binaryModel.numClasses; candidateAction ++) {
+                    if(available[(candidateAction - 1) % 2 + 1] && (action == -1 || scores[action] < scores[candidateAction])) 
+                        action = candidateAction;
                 }
             }
-            openParses = newOpenParses;
+            if(featureOutput != null && action >= 0) {
+                FeatureNode featuresNodes[] = mapper.mapForLibLinear(features);
+                featureOutput.print(action + 1);
+                for(int i = 0; i < featuresNodes.length; i++) {
+                    featureOutput.printf(" %d:1", featuresNodes[i].index);
+                }
+                featureOutput.println();
+            }
+            if(action == -1) {
+                output.add(context.stack); // generated a complete tree
+                if(output.size() % 1000 == 0) System.err.println(output.size() + " " + openParses.size());
+            } else if(action == SHIFT) {
+                //System.out.println("shift " + context.input[0].word);
+                TreeNode top = new TreeNode(context.input[0]);
+                context.input[0] = context.input[1];
+                context.input[1] = context.input[2];
+                top.next = context.stack;
+                if(context.input[1] != null && context.input[1].next != null && context.input[1].next.outgoing.size() > 0) { // a bit tricky
+                    for(InputArc arc: context.input[1].next.outgoing) {
+                        context.input[2] = arc;
+                        openParses.add(new ParseContext(top, context.input.clone()));
+                    }
+                } else {
+                    context.input[2] = null;
+                    context.stack = top;
+                    openParses.add(context);
+                }
+            } else if((action - 1) % 2 + 1 == LEFT) {
+                //System.out.println("left " + context.stack.next.input.word + " <-(" + binaryModel.labels.get((action - 1) / 2) + ") " + context.stack.input.word);
+                TreeNode top = context.stack.next.addChild(context.stack, mapper.labels.get((action - 1) / 2));
+                top.next = context.stack.next.next;
+                context.stack = top;
+                openParses.add(context);
+            } else if((action - 1) % 2 + 1 == RIGHT) {
+                //System.out.println("right " + context.stack.next.input.word + " -> " + context.stack.input.word);
+                TreeNode top = context.stack.addChild(context.stack.next, mapper.labels.get((action - 1) / 2));
+                top.next = context.stack.next.next;
+                context.stack = top;
+                openParses.add(context);
+            } else {
+                System.err.println("ERROR: unexpected action " + action);
+            }
         }
         if(actions != null && currentAction != actions.size()) {
             System.err.printf("\rWARNING: num actions %d != effective actions %d\n", actions.size(), currentAction);
@@ -328,7 +332,9 @@ class LatticeParser {
                     arc.next = new InputNode(null);
                     inputCurrent = arc.next;
                 }
-                start.number(1);
+                Vector<InputNode> startNodes = new Vector<InputNode>();
+                startNodes.add(start);
+                InputNode.topologicalSort(startNodes, 1);
                 latticePredict(start, actions, featureFile); // extract features
             } else {
                 System.err.printf("ERROR: found a non-projective tree");
@@ -357,33 +363,45 @@ class LatticeParser {
         binaryModel.loadModel(modelFilename);
         //System.err.println("ok.");
         String line;
-        Vector<InputNode> nodes = new Vector<InputNode>();
+        THashMap<String, InputNode> nodes = new THashMap<String, InputNode>();
+        THashMap<String, InputNode> startNodes = new THashMap<String, InputNode>();
         while(null != (line = input.readLine())) {
             line = line.trim();
             if("".equals(line)) {
-                nodes.firstElement().number(1);
-                Vector<TreeNode> forest = latticePredict(nodes.firstElement(), null, null);
+                InputNode first = new Vector<InputNode>(startNodes.values()).firstElement();
+                InputNode.topologicalSort(startNodes.values(), 1);
+                Vector<TreeNode> forest = latticePredict(first, null, null);
                 System.err.println("num parses = " + forest.size());
                 //outputForest(forest, System.out);
                 HypergraphOutput output = new HypergraphOutput();
                 output.writeHypergraph(forest, System.out);
                 System.out.println();
                 nodes.clear();
+                startNodes.clear();
             } else {
                 String tokens[] = line.split("\\s+");
-                if(tokens.length == 1) continue;
-                int startNode = Integer.parseInt(tokens[0]);
-                int endNode = Integer.parseInt(tokens[1]);
+                if(tokens.length != 4) continue;
+                String edgeStart = tokens[0];
+                String edgeEnd = tokens[1];
                 String word = tokens[2];
                 String tag = tokens[3];
-                while(nodes.size() < startNode + 1) nodes.add(new InputNode(null));
-                while(nodes.size() < endNode + 1) nodes.add(new InputNode(null));
-                nodes.get(startNode).outgoing.add(new InputArc(word, tag, nodes.get(endNode)));
+                if(!nodes.containsKey(edgeStart)) {
+                    InputNode node = new InputNode(null);
+                    nodes.put(edgeStart, node);
+                    startNodes.put(edgeStart, node);
+                }
+                if(!nodes.containsKey(edgeEnd)) nodes.put(edgeEnd, new InputNode(null));
+                if(startNodes.containsKey(edgeEnd)) startNodes.remove(edgeEnd);
+                nodes.get(edgeStart).outgoing.add(new InputArc(word, tag, nodes.get(edgeEnd)));
             }
         }
         if(nodes.size() > 0) {
-            nodes.firstElement().number(1);
-            Vector<TreeNode> forest = latticePredict(nodes.firstElement(), null, null);
+            System.err.println(startNodes.size());
+            //System.err.println("before-number");
+            InputNode first = new Vector<InputNode>(startNodes.values()).firstElement();
+            InputNode.topologicalSort(startNodes.values(), 1);
+            //System.err.println("after-number");
+            Vector<TreeNode> forest = latticePredict(first, null, null);
             System.err.println("num parses = " + forest.size());
             //outputForest(forest, System.out);
             HypergraphOutput output = new HypergraphOutput();
@@ -412,7 +430,9 @@ class LatticeParser {
                 arc.next = new InputNode(null);
                 inputCurrent = arc.next;
             }
-            start.number(1);
+            Vector<InputNode> startNodes = new Vector<InputNode>();
+            startNodes.add(start);
+            InputNode.topologicalSort(startNodes, 1);
             Vector<TreeNode> forest = latticePredict(start, null, null);
             if(forest.size() != 0) {
                 forest.firstElement().setParentId(0);

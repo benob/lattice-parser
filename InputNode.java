@@ -9,19 +9,26 @@ GNU General Public License for more details.
 */
 
 import java.util.*;
+import gnu.trove.*;
+
 class InputNode {
     public Vector<InputArc> outgoing;
     public InputNode(Vector<InputArc> arcs) {
         if(arcs != null) outgoing = arcs;
         else outgoing = new Vector<InputArc>();
     }
-    void number(int start) {
-        LinkedList<InputArc> queue = new LinkedList<InputArc>(outgoing);
+    static void topologicalSort(Collection<InputNode> startNodes, int start) {
+        LinkedList<InputArc> queue = new LinkedList<InputArc>();
+        for(InputNode node: startNodes) {
+            queue.addAll(node.outgoing);
+        }
         while(queue.size() > 0) {
             InputArc first = queue.removeFirst();
-            first.id = start;
-            if(first.next != null) queue.addAll(first.next.outgoing);
-            start++;
+            if(first.id == 0) {
+                first.id = start;
+                if(first.next != null) queue.addAll(first.next.outgoing);
+                start++;
+            }
         }
     }
 }
